@@ -1,0 +1,63 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    name: Validate bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - name: Validate DABs bundle
+        run: databricks bundle validate
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - name: Install dependencies
+        run: uv sync --extra dev
+      - name: Run tests
+        run: uv run pytest -v
+
+  deploy-staging:
+    name: Deploy to staging
+    needs: [validate, test]
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - name: Deploy to staging
+        run: databricks bundle deploy -t staging
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DATABRICKS_BUNDLE_VAR_bucket: ${{ secrets.S3_BUCKET }}
+          DATABRICKS_BUNDLE_VAR_checkpoint_base: ${{ secrets.CHECKPOINT_BASE }}
+
+  deploy-prod:
+    name: Deploy to prod
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production  # requires manual approval in GitHub
+    steps:
+      - uses: actions/checkout@v4
+      - uses: databricks/setup-cli@main
+      - name: Deploy to prod
+        run: databricks bundle deploy -t prod
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DATABRICKS_BUNDLE_VAR_bucket: ${{ secrets.S3_BUCKET }}
+          DATABRICKS_BUNDLE_VAR_checkpoint_base: ${{ secrets.CHECKPOINT_BASE }}
