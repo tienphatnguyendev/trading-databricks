@@ -1,0 +1,26 @@
+[project]
+name = "trading-databricks"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pyspark==3.5.*",
+    "delta-spark==3.2.*",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "chispa>=0.9",
+    "pytest-mock>=3.14",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.0",
+    "chispa>=0.9",
+    "pytest-mock>=3.14",
+]

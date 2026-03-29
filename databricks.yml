@@ -1,0 +1,32 @@
+bundle:
+  name: trading-databricks
+
+variables:
+  catalog:
+    description: Unity Catalog catalog name (e.g. dev_trading)
+    default: dev_trading
+  bucket:
+    description: S3 bucket name containing bronze/ data
+  checkpoint_base:
+    description: S3 path prefix for Auto Loader checkpoints
+
+include:
+  - resources/*.yml
+
+targets:
+  dev:
+    default: true
+    workspace:
+      host: ${workspace.host}
+    variables:
+      catalog: dev_trading
+  staging:
+    workspace:
+      host: ${workspace.host}
+    variables:
+      catalog: staging_trading
+  prod:
+    workspace:
+      host: ${workspace.host}
+    variables:
+      catalog: prod_trading
