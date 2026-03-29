@@ -1,0 +1,9 @@
+# Shared cluster config reference
+# Note: DABs does not support cross-file YAML anchors.
+# Copy this config inline into each job file using a YAML anchor.
+#
+# Config:
+#   spark_version: 15.4.x-scala2.12
+#   node_type_id: m5.xlarge
+#   num_workers: 1-2 (autoscale)
+#   spot workers with on-demand driver (first_on_demand: 1)

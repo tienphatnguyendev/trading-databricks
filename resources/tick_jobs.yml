@@ -1,0 +1,54 @@
+# Tick pipeline — awaiting tick-scraper-aws implementation
+# Uncomment schedule block when tick data is available in S3
+
+resources:
+  jobs:
+    tick_pipeline:
+      name: tick-pipeline-${bundle.target}
+      description: "Bronze ingestion + silver + gold bars for BTC-USDT ticks"
+
+      # schedule:
+      #   quartz_cron_expression: "0 */5 * * * ?"
+      #   timezone_id: UTC
+      #   pause_status: UNPAUSED
+
+      tasks:
+        - task_key: bronze_ingest_ticks
+          spark_python_task:
+            python_file: src/ticks/bronze/ingest_ticks.py
+            parameters:
+              - "--catalog"
+              - "${var.catalog}"
+              - "--bucket"
+              - "${var.bucket}"
+              - "--checkpoint-base"
+              - "${var.checkpoint_base}"
+          new_cluster: &tick_cluster
+            spark_version: 15.4.x-scala2.12
+            node_type_id: m5.xlarge
+            num_workers: 2
+            enable_elastic_disk: true
+            aws_attributes:
+              availability: SPOT_WITH_FALLBACK
+              first_on_demand: 1
+              spot_bid_price_percent: 100
+
+        - task_key: silver_clean_ticks
+          depends_on:
+            - task_key: bronze_ingest_ticks
+          spark_python_task:
+            python_file: src/ticks/silver/clean_ticks.py
+            parameters:
+              - "--catalog"
+              - "${var.catalog}"
+          new_cluster: *tick_cluster
+
+        - task_key: gold_bars
+          depends_on:
+            - task_key: silver_clean_ticks
+          spark_python_task:
+            python_file: src/ticks/gold/bar_construction.py
+            parameters:
+              - "--catalog"
+              - "${var.catalog}"
+          new_cluster: *tick_cluster
