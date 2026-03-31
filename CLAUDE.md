@@ -27,27 +27,27 @@ This is the **Databricks transformation and feature engineering platform** for t
 
 ## Development Workflow
 
-Every feature must trace to a Linear ticket in the **Trading Databricks** project (team key: `TRD`).
+Every feature must trace to a Linear ticket in the **Trading Databricks** project (team: `data-sci-bro`, identifier prefix: `TRD`).
 
 ### Step 1 — Before creating a branch
 Use the `linear-server` MCP to look up an existing open ticket or create a new one:
 - Search: list issues in the "Trading Databricks" project
-- Create: if no ticket exists for this work, create one and note the identifier
+- Create: if no ticket exists for this work, create one in the `TRD` team and note the identifier
 
 ### Branch naming
 ```
 type/TRD-NNN-short-description
 ```
 - `type`: `feat` | `fix` | `chore` | `docs` | `test` | `refactor`
-- `TRD-NNN`: Linear ticket identifier (e.g. `TRD-42`)
+- `TRD-NNN`: Linear ticket identifier (e.g. `TRD-1`)
 - `short-description`: lowercase, hyphen-separated, ≤ 5 words
 
 **Examples:**
 ```
-feat/TRD-42-add-news-silver-layer
-fix/TRD-43-tick-timestamp-cast
-chore/TRD-44-update-cluster-config
-test/TRD-45-bar-construction-unit-tests
+feat/TRD-1-add-news-silver-layer
+fix/TRD-2-tick-timestamp-cast
+chore/TRD-3-update-cluster-config
+test/TRD-4-bar-construction-unit-tests
 ```
 
 ### Commit format
@@ -56,9 +56,9 @@ TRD-NNN type: short imperative description
 ```
 **Examples:**
 ```
-TRD-42 feat: add silver news dedup transform
-TRD-42 test: add silver news pytest assertions
-TRD-43 fix: correct tick timestamp timezone cast
+TRD-1 feat: add silver news dedup transform
+TRD-1 test: add silver news pytest assertions
+TRD-2 fix: correct tick timestamp timezone cast
 ```
 
 ### Superpowers workflow integration
