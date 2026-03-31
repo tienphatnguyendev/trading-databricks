@@ -3,12 +3,14 @@ bundle:
 
 variables:
   catalog:
-    description: Unity Catalog catalog name (e.g. dev_trading)
-    default: dev_trading
+    description: Unity Catalog catalog name (e.g. trading-signal-gen-dev)
+    default: trading-signal-gen-dev
   bucket:
-    description: S3 bucket name containing bronze/ data
+    description: S3 bucket name containing raw data
+    default: ai-trading-raw-ap-southeast-1
   checkpoint_base:
     description: S3 path prefix for Auto Loader checkpoints
+    default: s3://ai-trading-raw-ap-southeast-1/checkpoints
 
 include:
   - resources/*.yml
@@ -17,16 +19,16 @@ targets:
   dev:
     default: true
     workspace:
-      host: ${workspace.host}
+      host: https://dbc-73b04434-2ca0.cloud.databricks.com
     variables:
-      catalog: dev_trading
+      catalog: trading-signal-gen-dev
   staging:
     workspace:
-      host: ${workspace.host}
+      host: https://dbc-73b04434-2ca0.cloud.databricks.com
     variables:
-      catalog: staging_trading
+      catalog: trading-signal-gen-staging
   prod:
     workspace:
-      host: ${workspace.host}
+      host: https://dbc-73b04434-2ca0.cloud.databricks.com
     variables:
-      catalog: prod_trading
+      catalog: trading-signal-prod

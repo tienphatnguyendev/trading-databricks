@@ -13,7 +13,7 @@ resources:
         - task_key: bronze_ingest
           description: "Auto Loader: S3 NDJSON → bronze.news_raw"
           spark_python_task:
-            python_file: src/news/bronze/ingest_news.py
+            python_file: ../src/news/bronze/ingest_news.py
             parameters:
               - "--catalog"
               - "${var.catalog}"
@@ -22,9 +22,11 @@ resources:
               - "--checkpoint-base"
               - "${var.checkpoint_base}"
           new_cluster: &job_cluster
-            spark_version: 15.4.x-scala2.12
+            spark_version: 17.3.x-ml-scala2.13
             node_type_id: m5.xlarge
-            num_workers: 1
+            autoscale:
+              min_workers: 1
+              max_workers: 2
             enable_elastic_disk: true
             aws_attributes:
               availability: SPOT_WITH_FALLBACK
@@ -36,7 +38,7 @@ resources:
           depends_on:
             - task_key: bronze_ingest
           spark_python_task:
-            python_file: src/news/silver/clean_news.py
+            python_file: ../src/news/silver/clean_news.py
             parameters:
               - "--catalog"
               - "${var.catalog}"
@@ -47,7 +49,7 @@ resources:
           depends_on:
             - task_key: silver_clean
           spark_python_task:
-            python_file: src/news/gold/news_features.py
+            python_file: ../src/news/gold/news_features.py
             parameters:
               - "--catalog"
               - "${var.catalog}"

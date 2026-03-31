@@ -1,26 +1,66 @@
 [project]
 name = "trading-databricks"
 version = "0.1.0"
-requires-python = ">=3.11"
+requires-python = ">=3.12, <3.13"
 dependencies = [
-    "pyspark==3.5.*",
-    "delta-spark==3.2.*",
+    # Pinned to DBR 17.3 LTS ML runtime versions
+    "numpy==2.1.3",
+    "pandas==2.2.3",
+    "pyarrow==18.0.0",
+    "scikit-learn==1.6.1",
+    "lightgbm==4.6.0",
+    "scipy==1.16.0",
+    "mlflow==3.0.1",
+    # Utilities
+    "databricks-sdk==0.102.0",
+    "python-dotenv==1.1.1",
+    "loguru==0.7.3",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.0",
-    "chispa>=0.9",
-    "pytest-mock>=3.14",
+    "databricks-connect>=17.3,<18",
+    "ipykernel>=6.29.5,<7",
+    "pre-commit>=4.1.0,<5",
+    "pytest>=8.3.4,<9",
+    "chispa>=0.9,<1",
+    "pytest-mock>=3.14,<4",
+    "ruff>=0.9.0,<1",
 ]
 
+ci = [
+    "pre-commit>=4.1.0,<5",
+    "pytest>=8.3.4,<9",
+    "chispa>=0.9,<1",
+]
+
+[build-system]
+requires = ["setuptools>=72.0"]
+build-backend = "setuptools.build_meta"
+
 [tool.pytest.ini_options]
+addopts = "-s --no-header --no-summary"
 testpaths = ["tests"]
 pythonpath = ["."]
 
-[tool.uv]
-dev-dependencies = [
-    "pytest>=8.0",
-    "chispa>=0.9",
-    "pytest-mock>=3.14",
+[tool.ruff]
+line-length = 90
+
+[tool.ruff.lint]
+select = [
+    "F",    # pyflakes rules
+    "E",    # pycodestyle error rules
+    "W",    # pycodestyle warning rules
+    "B",    # flake8-bugbear rules
+    "I",    # isort rules
+    "UP",   # pyupgrade rules
+    "SIM",  # flake8-simplify rules
+    "ERA",  # eradicate rules
+    "ANN",  # flake8-annotations rules
 ]
+ignore = [
+    "ERA001",  # commented out code
+]
+
+[tool.ruff.format]
+indent-style = "space"

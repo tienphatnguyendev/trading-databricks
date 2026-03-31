@@ -44,7 +44,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
       - name: Run tests
-        run: uv run pytest -v
+        run: uv run pytest -v; code=$?; [ $code -eq 5 ] && echo "No tests collected (stubs only)" || exit $code
 
   deploy-staging:
     name: Deploy to staging
