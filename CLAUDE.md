@@ -27,7 +27,7 @@ This is the **Databricks transformation and feature engineering platform** for t
 
 ## Development Workflow
 
-Every feature must trace to a Linear ticket in the **Trading Databricks** project (team: `data-sci-bro`, identifier prefix: `TRD`).
+Every feature must trace to a Linear ticket in the **Trading Databricks** project (projectID: `bd63748f-7b85-4aa4-b67f-f26430a65a7f`,team: `data-sci-bro`, identifier prefix: `TRD`).
 
 ### Step 1 — Before creating a branch
 Use the `linear-server` MCP to look up an existing open ticket or create a new one:
