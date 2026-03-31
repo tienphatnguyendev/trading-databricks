@@ -1,8 +1,8 @@
 # Trading Databricks Platform — Design Spec
 
 **Date:** 2026-03-29
-**Status:** Draft
-**Revised:** 2026-03-30 — Updated for early-stop dedup, S3 topology refactor, and corrected EventBridge schedule.
+**Status:** Superseded by `2026-03-31-sdp-architecture-design.md`
+**Revised:** 2026-03-31 — Superseded by SDP architecture redesign (TRD-12). See new design spec for current architecture.
 **New repo:** `trading-databricks`
 
 ---

@@ -1,7 +1,7 @@
 # Project Specification: trading-databricks
 
-**Version:** 1.0
-**Last updated:** 2026-03-29
+**Version:** 2.0
+**Last updated:** 2026-03-31
 **Status:** Active
 
 ---
@@ -91,10 +91,11 @@ Each catalog has identical schemas: `bronze`, `silver`, `gold`.
 |-----------|-----------|-------|
 | Workspace | Databricks on AWS | Single workspace, catalog-per-environment |
 | Governance | Unity Catalog | Fine-grained access, data lineage |
-| Ingestion | Auto Loader (Structured Streaming) | availableNow=True trigger, scheduled |
+| Pipelines | Spark Declarative Pipelines (SDP) | `from pyspark import pipelines as dp` |
+| Ingestion | Auto Loader (`cloudFiles`) | Inside SDP streaming tables, no explicit trigger |
 | Storage | Delta Lake | Medallion: bronze / silver / gold |
-| Compute | Classic clusters (m5.xlarge) | Spot workers, on-demand driver |
-| IaC | Databricks Asset Bundles (DABs) | `databricks.yml` + `resources/*.yml` |
+| Compute | Serverless (SDP) | No cluster config required |
+| IaC | Databricks Asset Bundles (DABs) | `databricks.yml` + `resources/*.pipeline.yml` |
 | CI/CD | GitHub Actions | validate → test → staging → prod (manual gate) |
 | Package manager | uv | `pyproject.toml` + `uv.lock` |
 
@@ -104,28 +105,21 @@ Each catalog has identical schemas: `bronze`, `silver`, `gold`.
 
 **Source:** `s3://ai-trading-raw-ap-southeast-1/news/tradingview/year=YYYY/month=MM/day=DD/*.ndjson`
 **Schema contract:** defined in `news-scraper-aws/CLAUDE.md`
+**SDP pipeline:** `resources/news_pipeline.pipeline.yml` → `src/trading_databricks/news/pipeline.py`
 
-### Bronze — `bronze.news_raw`
-- Auto Loader reads NDJSON, infers schema, appends to Delta table
-- Trigger: `availableNow=True` — scheduled every 15 min
-- Schema evolution: `addNewColumns` mode
+### Bronze — `bronze.news_raw` (SDP Streaming Table)
+- `@dp.table()` with `cloudFiles` Auto Loader
+- `@dp.expect_or_drop("valid_story_id", ...)` quality gate
+- Schema location: `/Volumes/{catalog}/pipeline_metadata/trading_databricks_metadata/schemas/bronze_news_raw`
 
-### Silver — `silver.news_cleaned`
-1. Dedup by `story_id` (keep latest `scraped_at`)
-2. Cast `published_at`, `scraped_at` → `TIMESTAMP`
-3. Normalize whitespace in `headline`, `body`
-4. Flatten `provider` JSON into typed columns
-5. Add `_ingested_at` metadata column
+### Silver — `silver.news_cleaned` (SDP AUTO CDC, SCD Type 1)
+- `dp.create_auto_cdc_flow()` deduplicates on `story_id`, sequenced by `scraped_at`
+- Calls `clean_news(df)` from `news/silver.py`: cast timestamps, normalize text, flatten provider, add `_ingested_at`
 
-Write mode: MERGE on `story_id`.
-
-### Gold — `gold.news_features`
-- Sentiment scores (NLP library TBD — brainstorm before implementing)
-- Named entity extraction: tickers, companies, people
-- Topic/keyword classification flags
-- `gold.news_latest` view: last 24h of cleaned articles for gen-AI agents
-
-Write mode: overwrite.
+### Gold — `gold.news_features` (SDP Materialized View)
+- `@dp.materialized_view()` — full recompute on each pipeline update
+- Sentiment, entities, classification (stubs — TRD-4)
+- `@dp.temporary_view("_news_latest")` — last 24h for gen-AI agent queries (pipeline-internal)
 
 ---
 
@@ -177,14 +171,14 @@ Four bar types (Lopez de Prado, AFML Chapter 2):
 
 ## 7. Compute Configuration
 
+All SDP pipelines use **serverless compute** (`serverless: true` in pipeline YAML). No cluster config is required or maintained.
+
 | Setting | Value |
 |---------|-------|
-| Node type | `m5.xlarge` |
-| Workers | 1–2 (autoscale) |
-| Spot instances | Enabled for workers |
-| Driver | On-demand (`first_on_demand: 1`) |
-| Runtime | Databricks Runtime 17.3 LTS ML (Scala 2.13) |
+| Compute type | Serverless (managed by Databricks) |
+| Runtime | Databricks serverless runtime (auto-managed) |
 | S3 access | UC external location `db_s3_external_databricks-s3-ingest-5dfcc-ai-trading-raw` |
+| Classic clusters | Not used — deleted `clusters.yml` in TRD-12 |
 
 ---
 
@@ -220,7 +214,7 @@ Create a `production` GitHub environment with required reviewers for the prod ga
 - Each domain module gets its own test file
 
 ### SparkSession fixture
-Defined in `tests/conftest.py` — session-scoped, Delta Lake extensions enabled, `shuffle.partitions=4` for speed.
+Defined in `tests/conftest.py` — session-scoped, backed by `DatabricksSession.builder.serverless().getOrCreate()`. Uses Databricks serverless compute so tests run against the same runtime as production pipelines. Credentials resolved from `~/.databrickscfg`.
 
 ---
 

@@ -1,0 +1,19 @@
+resources:
+  pipelines:
+    tick_pipeline:
+      name: tick-pipeline-${bundle.target}
+      catalog: ${var.catalog}
+      schema: ${var.bronze_schema}
+      serverless: true
+      libraries:
+        - glob:
+            include: ../src/trading_databricks/ticks/pipeline.py
+      configuration:
+        bronze_schema: ${var.bronze_schema}
+        silver_schema: ${var.silver_schema}
+        gold_schema: ${var.gold_schema}
+        schema_location_base: ${var.schema_location_base}
+        source_bucket: ${var.bucket}
+      continuous: false
+      development: false
+      # schedule: commented out — awaiting tick-scraper-aws schema confirmation
