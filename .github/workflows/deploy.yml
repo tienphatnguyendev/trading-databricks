@@ -7,6 +7,22 @@ on:
     branches: [main]
 
 jobs:
+  validate-branch:
+    name: Validate branch name
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Check branch naming convention
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          if [[ ! "$BRANCH" =~ ^(feat|fix|chore|docs|test|refactor)/TRD-[0-9]+-[a-z0-9-]+$ ]]; then
+            echo "Branch '$BRANCH' does not follow convention."
+            echo "Required format: type/TRD-NNN-short-desc"
+            echo "Example: feat/TRD-42-add-news-silver-layer"
+            exit 1
+          fi
+          echo "Branch name '$BRANCH' is valid."
+
   validate:
     name: Validate bundle
     runs-on: ubuntu-latest
