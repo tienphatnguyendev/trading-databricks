@@ -1,5 +1,8 @@
 bundle:
   name: trading-databricks
+  databricks_cli_version: ">= 0.218.0"
+  deployment:
+    fail_on_active_runs: true
 
 variables:
   catalog:
@@ -15,20 +18,29 @@ variables:
 include:
   - resources/*.yml
 
+workspace:
+  host: https://dbc-73b04434-2ca0.cloud.databricks.com
+
 targets:
   dev:
     default: true
-    workspace:
-      host: https://dbc-73b04434-2ca0.cloud.databricks.com
+    mode: development
     variables:
       catalog: trading-signal-gen-dev
+
   staging:
     workspace:
-      host: https://dbc-73b04434-2ca0.cloud.databricks.com
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: trading-signal-gen-staging
+    presets:
+      trigger_pause_status: PAUSED
+
   prod:
+    mode: production
     workspace:
-      host: https://dbc-73b04434-2ca0.cloud.databricks.com
+      root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
     variables:
       catalog: trading-signal-prod
+    # run_as:
+    #   service_principal_name: <TBD — provision SP and uncomment>
