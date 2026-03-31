@@ -24,3 +24,6 @@ dist/
 
 # Databricks
 .databricks-resources.json
+
+# Git worktrees
+.worktrees/
