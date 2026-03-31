@@ -33,7 +33,7 @@ Three repos in the trading system:
 news-scraper-aws                     tick-scraper-aws
        │                                    │
        ▼                                    ▼
-  S3: bronze/tradingview/...          S3: bronze/ticks/...
+  S3: news/tradingview/...            S3: ticks/binance/...
        │                                    │
        └──────────────┬─────────────────────┘
                       ▼
@@ -70,17 +70,18 @@ news-scraper-aws                     tick-scraper-aws
 
 | Catalog | Purpose |
 |---------|---------|
-| `dev_trading` | Local development, experimentation |
-| `staging_trading` | Pre-prod validation, CI/CD target |
-| `prod_trading` | Production pipelines |
+| `trading-signal-gen-dev` | Local development, experimentation |
+| `trading-signal-gen-staging` | Pre-prod validation, CI/CD target |
+| `trading-signal-prod` | Production pipelines |
 
 Each catalog has identical schemas: `bronze`, `silver`, `gold`.
 
-**Cross-account S3 access:**
-1. IAM role in the scraper's AWS account that Databricks can assume
-2. Permissions: `s3:GetObject`, `s3:ListBucket` on the scraper's bucket (`bronze/*`)
-3. Unity Catalog storage credential + external location: `s3://<bucket>/bronze/`
-4. Instance profile attached to job cluster nodes
+**Cross-account S3 access (provisioned, do not recreate):**
+1. IAM role (`databricks-s3-ingest-5dfcc`) in the AWS account — Databricks workspace can assume it
+2. Permissions: `s3:GetObject`, `s3:ListBucket` on `ai-trading-raw-ap-southeast-1`
+3. Unity Catalog storage credential: `db_s3_credentials_databricks-s3-ingest-5dfcc-ai-trading-raw`
+4. Unity Catalog external location: `db_s3_external_databricks-s3-ingest-5dfcc-ai-trading-raw` → `s3://ai-trading-raw-ap-southeast-1/`
+5. Job owner/service principal must have `READ FILES` on the external location (workspace admins have implicit access)
 
 ---
 
@@ -101,7 +102,7 @@ Each catalog has identical schemas: `bronze`, `silver`, `gold`.
 
 ## 5. News Pipeline
 
-**Source:** `s3://{bucket}/bronze/tradingview/YYYY/MM/DD/*.ndjson`
+**Source:** `s3://ai-trading-raw-ap-southeast-1/news/tradingview/year=YYYY/month=MM/day=DD/*.ndjson`
 **Schema contract:** defined in `news-scraper-aws/CLAUDE.md`
 
 ### Bronze — `bronze.news_raw`
@@ -130,7 +131,7 @@ Write mode: overwrite.
 
 ## 6. Tick Pipeline
 
-**Source:** `s3://{bucket}/bronze/ticks/{symbol}/YYYY/MM/DD/*.ndjson`
+**Source:** `s3://ai-trading-raw-ap-southeast-1/ticks/binance/symbol={symbol}/year=YYYY/month=MM/day=DD/*.ndjson`
 **Schema contract:** defined in `tick-scraper-aws/CLAUDE.md` (not yet built)
 
 **Status:** Bronze and silver are stubs. Bar construction is scaffolded.
@@ -182,8 +183,8 @@ Four bar types (Lopez de Prado, AFML Chapter 2):
 | Workers | 1–2 (autoscale) |
 | Spot instances | Enabled for workers |
 | Driver | On-demand (`first_on_demand: 1`) |
-| Runtime | Databricks 15.4 LTS (Scala 2.12) |
-| Instance profile | IAM role with S3 read access |
+| Runtime | Databricks Runtime 17.3 LTS ML (Scala 2.13) |
+| S3 access | UC external location `db_s3_external_databricks-s3-ingest-5dfcc-ai-trading-raw` |
 
 ---
 
@@ -192,11 +193,16 @@ Four bar types (Lopez de Prado, AFML Chapter 2):
 ```
 GitHub Actions:
   PR / push to feature branch  → databricks bundle validate + uv run pytest
-  Push to main                 → deploy to staging_trading catalog
-  Manual approval              → deploy to prod_trading catalog
+  Push to main                 → deploy to trading-signal-gen-staging catalog
+  Manual approval              → deploy to trading-signal-prod catalog
 ```
 
-Required GitHub secrets: `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, `S3_BUCKET`, `CHECKPOINT_BASE`.
+Required GitHub secrets:
+- `DATABRICKS_HOST` — workspace URL
+- `DATABRICKS_TOKEN` — service principal or PAT
+- `DATABRICKS_BUNDLE_VAR_bucket` — S3 bucket name (e.g. `ai-trading-raw-ap-southeast-1`)
+- `DATABRICKS_BUNDLE_VAR_checkpoint_base` — S3 checkpoint prefix (e.g. `s3://ai-trading-raw-ap-southeast-1/checkpoints`)
+
 Create a `production` GitHub environment with required reviewers for the prod gate.
 
 ---

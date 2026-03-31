@@ -12,7 +12,7 @@ Expected tick record schema (minimum):
     exchange:   e.g. "binance"
     batch_id:   batch identifier from tick-scraper-aws
 
-Source path: s3://{bucket}/bronze/ticks/{symbol}/
+Source path: s3://{bucket}/ticks/binance/symbol={symbol}/year=YYYY/month=MM/day=DD/
 Target table: {catalog}.bronze.ticks_raw
 
 STATUS: awaiting tick-scraper-aws schema definition.

@@ -9,3 +9,18 @@ dist/
 .pytest_cache/
 .coverage
 *.log
+.env
+# AI/LLM tools
+.ai-dev-kit/
+.claude/
+.gemini/
+.mcp.json
+
+# IDE
+.vscode/
+
+# GitHub
+.github/skills/
+
+# Databricks
+.databricks-resources.json
