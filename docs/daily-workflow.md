@@ -133,16 +133,16 @@ This is the inner loop you run on your laptop. It costs $0 and needs no Databric
 
 ```bash
 # 1. Create a feature branch (never work directly on main)
-git checkout -b feat/news-silver-dedup
+git checkout -b feat/TRD-NNN-news-silver-dedup
 
-# 2. Write tests first
-uv run pytest tests/news/test_clean_news.py -x -v   # should FAIL (function not implemented)
+# 2. Write tests first (pure transform functions are testable)
+uv run pytest tests/news/test_silver.py -x -v   # should FAIL (not yet implemented)
 
-# 3. Write the implementation (pure transform functions in src/)
-#    ... edit src/news/silver/clean_news.py ...
+# 3. Write the implementation (pure transform in src/trading_databricks/news/silver.py)
+#    pipeline.py is NOT locally testable — only test transform modules
 
 # 4. Run tests again
-uv run pytest tests/news/test_clean_news.py -x -v   # should PASS
+uv run pytest tests/news/test_silver.py -x -v   # should PASS
 
 # 5. Run the full test suite
 uv run pytest -v
@@ -151,7 +151,7 @@ uv run pytest -v
 databricks bundle validate
 ```
 
-The test suite uses a **local SparkSession** defined in `tests/conftest.py` with Delta Lake extensions. No remote cluster is involved.
+The test suite uses `DatabricksSession.builder.serverless().getOrCreate()` — it runs against Databricks serverless compute, not a local JVM. Tests require valid Databricks credentials in `~/.databrickscfg`.
 
 ---
 
@@ -162,21 +162,22 @@ After local tests pass, deploy to dev to test with **real S3 data** on a **real 
 ### Deploy and run
 
 ```bash
-# Deploy your branch's job definitions to the dev workspace
+# Deploy your branch's pipeline definitions to the dev workspace
 databricks bundle deploy -t dev
 
-# Run the full news pipeline (bronze → silver → gold)
+# Run the full news SDP pipeline (bronze → silver → gold)
 databricks bundle run news_pipeline -t dev
 
-# Or run a single task within the pipeline
-databricks bundle run news_pipeline -t dev --task bronze_ingest
+# Run other domain pipelines
+databricks bundle run tick_pipeline -t dev
+databricks bundle run ml_pipeline -t dev
 ```
 
 ### What happens under the hood
 
-1. DABs creates (or updates) a job called `news-pipeline-dev` in your Databricks workspace
-2. The job spins up an `m5.xlarge` cluster (spot workers, on-demand driver)
-3. Tasks read NDJSON from `s3://ai-trading-raw-ap-southeast-1/news/tradingview/...`
+1. DABs creates (or updates) a pipeline called `news-pipeline-dev` in your Databricks workspace
+2. The SDP pipeline runs on **serverless compute** — no cluster spin-up wait
+3. Auto Loader reads NDJSON from `s3://ai-trading-raw-ap-southeast-1/news/tradingview/...`
 4. Results land in `trading-signal-gen-dev.bronze.news_raw`, `trading-signal-gen-dev.silver.news_cleaned`, etc.
 
 ### Inspect dev results
@@ -268,11 +269,12 @@ Here's the complete journey of implementing the silver news deduplication:
 
 ```
 LOCAL DEVELOPMENT
-  1. git checkout -b feat/news-silver-dedup
-  2. Write test_deduplicate_keeps_latest_scraped_at in tests/news/test_clean_news.py
-  3. uv run pytest tests/news/test_clean_news.py -x -v          → RED (not implemented)
-  4. Implement deduplicate() in src/news/silver/clean_news.py
-  5. uv run pytest tests/news/test_clean_news.py -x -v          → GREEN
+  1. git checkout -b feat/TRD-NNN-news-silver-dedup
+  2. Write test_deduplicate_* in tests/news/test_silver.py
+  3. uv run pytest tests/news/test_silver.py -x -v              → RED (not implemented)
+  4. Implement clean_news() in src/trading_databricks/news/silver.py
+     (pipeline.py is NOT locally testable — only pure transform modules)
+  5. uv run pytest tests/news/test_silver.py -x -v              → GREEN
   6. uv run pytest -v                                            → all GREEN
   7. databricks bundle validate                                  → OK
 
@@ -306,11 +308,13 @@ PRODUCTION (manual gate)
 | **Local** | `uv run pytest -x -v` | Stop on first failure |
 | **Local** | `uv run pytest tests/news/` | News tests only |
 | **Local** | `uv run pytest tests/ticks/` | Tick tests only |
+| **Local** | `uv run pytest tests/ml/` | ML tests only |
+| **Local** | `uv run pytest tests/common/` | Shared utilities tests only |
 | **Local** | `databricks bundle validate` | Validate config (no deploy) |
 | **Dev** | `databricks bundle deploy -t dev` | Deploy to dev catalog |
-| **Dev** | `databricks bundle run news_pipeline -t dev` | Run full news pipeline |
-| **Dev** | `databricks bundle run news_pipeline -t dev --task bronze_ingest` | Run single task |
-| **Dev** | `databricks bundle run tick_pipeline -t dev` | Run tick pipeline |
+| **Dev** | `databricks bundle run news_pipeline -t dev` | Run full news SDP pipeline |
+| **Dev** | `databricks bundle run tick_pipeline -t dev` | Run tick SDP pipeline |
+| **Dev** | `databricks bundle run ml_pipeline -t dev` | Run ML feature SDP pipeline |
 | **Staging** | `gh run list --workflow=deploy.yml` | Check CI/CD status |
 | **Staging** | `gh run view <run-id>` | View run details |
 
@@ -333,9 +337,9 @@ Replace `` `trading-signal-gen-dev` `` with `` `trading-signal-gen-staging` `` o
 
 ## 9. Common Gotchas for New Databricks Developers
 
-**Cluster spin-up time.** Dev job runs take 3-5 minutes just for cluster startup before your code runs. This is normal — don't assume the job is stuck.
+**Serverless startup.** SDP pipelines use serverless compute — startup is typically under 30 seconds. No cluster provisioning is required.
 
-**Spot instance preemption.** Workers use spot instances to save cost. If a run fails with "instance lost" or "spot interruption", just re-run it. The driver node is on-demand, so job state is preserved.
+**Serverless reliability.** SDP serverless pipelines are managed by Databricks — no spot interruptions or node failures to handle.
 
 **Bundle deploy is idempotent.** Running `databricks bundle deploy -t dev` multiple times is safe. It creates the job on first deploy and updates it on subsequent deploys.
 
@@ -343,7 +347,7 @@ Replace `` `trading-signal-gen-dev` `` with `` `trading-signal-gen-staging` `` o
 
 **Schema evolution.** Auto Loader uses `addNewColumns` mode. If a new field appears in the NDJSON source, it's automatically added to the bronze table. However, removed fields stay in the schema — they just become null.
 
-**Delta MERGE is safe to re-run.** Silver uses MERGE (upsert) by `story_id`. Running the same data through twice won't create duplicates.
+**AUTO CDC is safe to re-run.** Silver uses `dp.create_auto_cdc_flow()` (SCD Type 1) by `story_id`. Re-running the pipeline won't create duplicates.
 
 **Same S3 bucket, different catalogs.** All three environments read from the same S3 source data. Isolation is on the write side only (different catalogs). This means staging and prod process the same raw data — which is intentional.
 

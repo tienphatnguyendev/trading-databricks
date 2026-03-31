@@ -11,9 +11,18 @@ variables:
   bucket:
     description: S3 bucket name containing raw data
     default: ai-trading-raw-ap-southeast-1
-  checkpoint_base:
-    description: S3 path prefix for Auto Loader checkpoints
-    default: s3://ai-trading-raw-ap-southeast-1/checkpoints
+  bronze_schema:
+    description: Schema for bronze (raw) Delta tables
+    default: bronze
+  silver_schema:
+    description: Schema for silver (cleaned) Delta tables
+    default: silver
+  gold_schema:
+    description: Schema for gold (feature/bar) Delta tables
+    default: gold
+  schema_location_base:
+    description: Base Volume path for Auto Loader cloudFiles schema metadata
+    default: /Volumes/${var.catalog}/pipeline_metadata/trading_databricks_metadata/schemas
 
 include:
   - resources/*.yml

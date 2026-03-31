@@ -1,0 +1,18 @@
+resources:
+  pipelines:
+    ml_pipeline:
+      name: ml-pipeline-${bundle.target}
+      catalog: ${var.catalog}
+      schema: ${var.gold_schema}
+      serverless: true
+      libraries:
+        - glob:
+            include: ../src/trading_databricks/ml/pipeline.py
+      configuration:
+        bronze_schema: ${var.bronze_schema}
+        silver_schema: ${var.silver_schema}
+        gold_schema: ${var.gold_schema}
+        schema_location_base: ${var.schema_location_base}
+      continuous: false
+      development: false
+      # TODO: enable schedule after feature set is designed

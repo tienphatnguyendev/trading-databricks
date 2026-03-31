@@ -2,23 +2,16 @@
 from __future__ import annotations
 
 import pytest
+from databricks.connect import DatabricksSession
 from pyspark.sql import SparkSession
 
 
 @pytest.fixture(scope="session")
 def spark() -> SparkSession:
-    """Session-scoped local SparkSession with Delta Lake support."""
-    return (
-        SparkSession.builder.master("local[*]")
-        .appName("trading-databricks-tests")
-        .config(
-            "spark.sql.extensions",
-            "io.delta.sql.DeltaSparkSessionExtension",
-        )
-        .config(
-            "spark.sql.catalog.spark_catalog",
-            "org.apache.spark.sql.delta.catalog.DeltaCatalog",
-        )
-        .config("spark.sql.shuffle.partitions", "4")
-        .getOrCreate()
-    )
+    """Session-scoped SparkSession backed by Databricks serverless compute.
+
+    Uses DatabricksSession.builder.serverless() so tests run against the same
+    runtime as production pipelines without requiring a classic cluster.
+    Credentials are resolved from ~/.databrickscfg or environment variables.
+    """
+    return DatabricksSession.builder.serverless().getOrCreate()
