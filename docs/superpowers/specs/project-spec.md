@@ -18,7 +18,7 @@
 - Serving gold layer Delta tables to ML pipelines and gen-AI agents
 
 **Out of scope:**
-- Data collection from external APIs (news-scraper-aws, tick-scraper-aws)
+- Data collection from external APIs (news-scraper-aws, kinesis-tick-streamer)
 - Writing to S3 (this repo is read-only from S3)
 - Frontend or API serving
 - Model training or inference
@@ -30,7 +30,7 @@
 Three repos in the trading system:
 
 ```
-news-scraper-aws                     tick-scraper-aws
+news-scraper-aws                 kinesis-tick-streamer
        │                                    │
        ▼                                    ▼
   S3: news/tradingview/...            S3: ticks/binance/...
@@ -57,7 +57,7 @@ news-scraper-aws                     tick-scraper-aws
 | Repo | Responsibility | IaC | Deploys to |
 |------|---------------|-----|-----------|
 | `news-scraper-aws` | Scrape news → S3 NDJSON | SAM | AWS Lambda |
-| `tick-scraper-aws` (planned) | Scrape BTC-USDT ticks → S3 | SAM | AWS Lambda |
+| `kinesis-tick-streamer` | Stream BTC & ETH ticks → S3 | AWS CDK | ECS Fargate |
 | `trading-databricks` (this repo) | Ingest, transform, bars, features | DABs | Databricks |
 
 ---
