@@ -268,7 +268,6 @@ Do not modify without explicit user approval:
 | Question | Impact | When to Decide |
 |----------|--------|----------------|
 | NLP library for sentiment/entity extraction | gold news_features implementation | Brainstorm before implementing |
-| Tick data NDJSON schema | Bronze ticks table definition | When building tick-scraper-aws |
 | Bar construction thresholds (initial N values) | Dollar/volume/imbalance bar parameters | During tick pipeline implementation |
 | Dashboard tool (Databricks SQL, Grafana, Streamlit?) | Frontend architecture | After first gold tables are populated |
 | Gen-AI agent framework (LangChain, Databricks Agents?) | Gold layer schema design | Before building agent pipelines |
