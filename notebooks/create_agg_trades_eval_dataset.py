@@ -71,5 +71,5 @@ if __name__ == "__main__":
     parser.add_argument("--catalog", default="trading-signal-gen-dev", help="Target UC catalog")
     parser.add_argument("--file_path", default="/Volumes/trading-signal-gen-dev/default/uploads/BTCUSDT-aggTrades-2026-02.csv", help="Path to source CSV file in Volume")
     
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
     main(args.catalog, args.file_path)
