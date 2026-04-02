@@ -18,7 +18,7 @@
 - Serving gold layer Delta tables to ML pipelines and gen-AI agents
 
 **Out of scope:**
-- Data collection from external APIs (news-scraper-aws, tick-scraper-aws)
+- Data collection from external APIs (news-scraper-aws, kinesis-tick-streamer)
 - Writing to S3 (this repo is read-only from S3)
 - Frontend or API serving
 - Model training or inference
@@ -30,7 +30,7 @@
 Three repos in the trading system:
 
 ```
-news-scraper-aws                     tick-scraper-aws
+news-scraper-aws                 kinesis-tick-streamer
        │                                    │
        ▼                                    ▼
   S3: news/tradingview/...            S3: ticks/binance/...
@@ -57,7 +57,7 @@ news-scraper-aws                     tick-scraper-aws
 | Repo | Responsibility | IaC | Deploys to |
 |------|---------------|-----|-----------|
 | `news-scraper-aws` | Scrape news → S3 NDJSON | SAM | AWS Lambda |
-| `tick-scraper-aws` (planned) | Scrape BTC-USDT ticks → S3 | SAM | AWS Lambda |
+| `kinesis-tick-streamer` | Stream BTC & ETH ticks → S3 | AWS CDK | ECS Fargate |
 | `trading-databricks` (this repo) | Ingest, transform, bars, features | DABs | Databricks |
 
 ---
@@ -125,8 +125,21 @@ Each catalog has identical schemas: `bronze`, `silver`, `gold`.
 
 ## 6. Tick Pipeline
 
-**Source:** `s3://ai-trading-raw-ap-southeast-1/ticks/binance/symbol={symbol}/year=YYYY/month=MM/day=DD/*.ndjson`
-**Schema contract:** defined in `tick-scraper-aws/CLAUDE.md` (not yet built)
+**Source:** `s3://ai-trading-raw-ap-southeast-1/ticks/binance/symbol={SYMBOL}/year=YYYY/month=MM/day=DD/*.ndjson`
+**Schema contract:**
+
+```json
+{
+  "timestamp": "2026-03-31T12:00:00.123456Z",
+  "price": "67234.56000000",
+  "quantity": "0.00150000",
+  "side": "buy",
+  "trade_id": "123456789",
+  "symbol": "BTCUSDT",
+  "exchange": "binance",
+  "batch_id": "batch_20260331T120000Z_a1b2c3d4"
+}
+```
 
 **Status:** Bronze and silver are stubs. Bar construction is scaffolded.
 
@@ -255,7 +268,6 @@ Do not modify without explicit user approval:
 | Question | Impact | When to Decide |
 |----------|--------|----------------|
 | NLP library for sentiment/entity extraction | gold news_features implementation | Brainstorm before implementing |
-| Tick data NDJSON schema | Bronze ticks table definition | When building tick-scraper-aws |
 | Bar construction thresholds (initial N values) | Dollar/volume/imbalance bar parameters | During tick pipeline implementation |
 | Dashboard tool (Databricks SQL, Grafana, Streamlit?) | Frontend architecture | After first gold tables are populated |
 | Gen-AI agent framework (LangChain, Databricks Agents?) | Gold layer schema design | Before building agent pipelines |
