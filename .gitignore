@@ -28,3 +28,4 @@ dist/
 # Git worktrees
 .worktrees/
 .DS_Store
+.worktrees/
