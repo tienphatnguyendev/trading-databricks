@@ -1,3 +1,4 @@
+import json
 import mlflow
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import expr
@@ -49,6 +50,42 @@ def context_retriever_node(state: NewsAgentState) -> NewsAgentState:
     state['context'] = "MOCKED_CONTEXT: No historical context needed for MVP."
     return state
 
+@mlflow.trace(name="extractor_node")
+def extractor_node(state: NewsAgentState) -> NewsAgentState:
+    """Extracts causal events using ai_query."""
+    print(f"Running Extractor for article {state['article_id']}...")
+    text = state['article_text'].replace("'", "''")
+    prompt = f"Extract causal financial events from this text. Return a JSON array of objects with 'cause' and 'effect' keys. Text: {text}"
+    prompt = prompt.replace("'", "''")
+    
+    # Using ai_query with a standard model (e.g., databricks-meta-llama-3-1-70b-instruct)
+    query = f"""
+    SELECT ai_query(
+        'databricks-meta-llama-3-1-70b-instruct',
+        '{prompt}'
+    ) as extracted
+    """
+    try:
+        df = spark.sql(query)
+        result_str = df.collect()[0]['extracted']
+        # Try to parse JSON out of the response
+        try:
+            # Very basic extraction if wrapped in markdown
+            if "```json" in result_str:
+                result_str = result_str.split("```json")[1].split("```")[0].strip()
+            elif "```" in result_str:
+                result_str = result_str.split("```")[1].split("```")[0].strip()
+            
+            state['extracted_events'] = json.loads(result_str)
+        except json.JSONDecodeError:
+            state['extracted_events'] = [{"raw_response": result_str}]
+            
+    except Exception as e:
+        print(f"Extractor failed: {e}")
+        state['extracted_events'] = []
+        
+    return state
+
 if __name__ == "__main__":
     df_sample = load_eval_dataset(limit=1)
     if not df_sample.empty:
@@ -66,3 +103,6 @@ if __name__ == "__main__":
         if new_state['is_relevant']:
             new_state = context_retriever_node(new_state)
             print(f"Context Retriever Result: {new_state['context']}")
+            
+            new_state = extractor_node(new_state)
+            print(f"Extractor Result: {json.dumps(new_state['extracted_events'], indent=2)}")
