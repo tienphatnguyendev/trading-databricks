@@ -1,6 +1,14 @@
 import mlflow
 from pyspark.sql import SparkSession
 import pandas as pd
+from typing import TypedDict, List, Dict, Any, Optional
+
+class NewsAgentState(TypedDict):
+    article_id: str
+    article_text: str
+    is_relevant: Optional[bool]
+    context: Optional[str]
+    extracted_events: Optional[List[Dict[str, Any]]]
 
 # Initialize Spark session
 spark = SparkSession.builder.getOrCreate()
