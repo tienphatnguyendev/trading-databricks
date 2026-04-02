@@ -44,6 +44,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
       - name: Run tests
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: uv run pytest -v; code=$?; [ $code -eq 5 ] && echo "No tests collected (stubs only)" || exit $code
 
   deploy-staging:
