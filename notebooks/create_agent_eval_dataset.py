@@ -29,7 +29,7 @@ def main(catalog: str, bucket: str, limit: int):
     # We read from a specific day partition to keep the read fast and cheap
     # Feel free to expand the glob pattern if you need more variance.
     source_path = f"s3://{bucket}/news/tradingview/year=2026/month=03/day=30/*.ndjson"
-    target_table = f"{catalog}.bronze.news_agent_eval_dataset"
+    target_table = f"`{catalog}`.bronze.news_agent_eval_dataset"
 
     print(f"Reading from: {source_path}")
     print(f"Writing to: {target_table}")
