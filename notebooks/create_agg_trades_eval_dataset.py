@@ -18,7 +18,7 @@ BINANCE_CSV_SCHEMA = StructType([
 def main(catalog: str, file_path: str):
     spark = SparkSession.builder.getOrCreate()
     
-    target_table = f"{catalog}.bronze.raw_aggTrades_samples"
+    target_table = f"`{catalog}`.bronze.raw_aggTrades_samples"
 
     print(f"Reading from: {file_path}")
     print(f"Writing to: {target_table}")
@@ -57,7 +57,7 @@ def main(catalog: str, file_path: str):
 
     print("Sample of mapped data:")
     mapped_df.show(5, truncate=False)
-    
+
     # 3. Write to Delta
     print(f"Writing data to {target_table}...")
     mapped_df.write.format("delta").mode("overwrite").saveAsTable(target_table)
