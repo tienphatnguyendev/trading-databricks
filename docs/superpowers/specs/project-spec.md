@@ -125,8 +125,21 @@ Each catalog has identical schemas: `bronze`, `silver`, `gold`.
 
 ## 6. Tick Pipeline
 
-**Source:** `s3://ai-trading-raw-ap-southeast-1/ticks/binance/symbol={symbol}/year=YYYY/month=MM/day=DD/*.ndjson`
-**Schema contract:** defined in `tick-scraper-aws/CLAUDE.md` (not yet built)
+**Source:** `s3://ai-trading-raw-ap-southeast-1/ticks/binance/symbol={SYMBOL}/year=YYYY/month=MM/day=DD/*.ndjson`
+**Schema contract:**
+
+```json
+{
+  "timestamp": "2026-03-31T12:00:00.123456Z",
+  "price": "67234.56000000",
+  "quantity": "0.00150000",
+  "side": "buy",
+  "trade_id": "123456789",
+  "symbol": "BTCUSDT",
+  "exchange": "binance",
+  "batch_id": "batch_20260331T120000Z_a1b2c3d4"
+}
+```
 
 **Status:** Bronze and silver are stubs. Bar construction is scaffolded.
 
