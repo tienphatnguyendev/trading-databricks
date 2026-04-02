@@ -42,6 +42,13 @@ def gatekeeper_node(state: NewsAgentState) -> NewsAgentState:
         
     return state
 
+@mlflow.trace(name="context_retriever_node")
+def context_retriever_node(state: NewsAgentState) -> NewsAgentState:
+    """MVP Mock for Context Retriever."""
+    print(f"Running Context Retriever for article {state['article_id']}...")
+    state['context'] = "MOCKED_CONTEXT: No historical context needed for MVP."
+    return state
+
 if __name__ == "__main__":
     df_sample = load_eval_dataset(limit=1)
     if not df_sample.empty:
@@ -55,3 +62,7 @@ if __name__ == "__main__":
         )
         new_state = gatekeeper_node(initial_state)
         print(f"Gatekeeper Result: {new_state['is_relevant']}")
+        
+        if new_state['is_relevant']:
+            new_state = context_retriever_node(new_state)
+            print(f"Context Retriever Result: {new_state['context']}")
