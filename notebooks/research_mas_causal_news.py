@@ -1,3 +1,13 @@
+# Databricks notebook source
+# MAGIC %md
+# MAGIC # MAS Causal News Research
+# MAGIC
+# MAGIC This notebook evaluates a LangGraph-based agent pipeline for causal financial event extraction from news.
+
+# COMMAND ----------
+# MAGIC %pip install langgraph pandas mlflow
+
+# COMMAND ----------
 import json
 import mlflow
 from pyspark.sql import SparkSession
@@ -16,11 +26,21 @@ class NewsAgentState(TypedDict):
 # Initialize Spark session
 spark = SparkSession.builder.getOrCreate()
 
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 1. Load Evaluation Dataset
+
+# COMMAND ----------
 def load_eval_dataset(limit: int = 5) -> pd.DataFrame:
     """Loads the news agent eval dataset for testing."""
     df = spark.table("`trading-signal-gen-dev`.`bronze`.`news_agent_eval_dataset`")
     return df.limit(limit).toPandas()
 
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 2. Define Agent Nodes
+
+# COMMAND ----------
 @mlflow.trace(name="gatekeeper_node")
 def gatekeeper_node(state: NewsAgentState) -> NewsAgentState:
     """Classifies if the article is financially relevant using ai_classify."""
@@ -87,6 +107,11 @@ def extractor_node(state: NewsAgentState) -> NewsAgentState:
         
     return state
 
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 3. Build LangGraph Workflow
+
+# COMMAND ----------
 def build_graph():
     """Builds and compiles the LangGraph."""
     workflow = StateGraph(NewsAgentState)
@@ -116,6 +141,11 @@ def build_graph():
     
     return workflow.compile()
 
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## 4. Evaluation Execution
+
+# COMMAND ----------
 @mlflow.trace(name="evaluate_article")
 def evaluate_article(app, row):
     """Evaluates a single article through the compiled graph."""
