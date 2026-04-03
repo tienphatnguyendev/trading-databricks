@@ -12,6 +12,7 @@ This is the **Databricks transformation and feature engineering platform** for t
 - **Gold Delta table schemas are contracts.** Field renames or removals require explicit approval.
 - **Tests must pass before claiming work is done.** Run `uv run pytest` and verify output.
 - **Run `databricks bundle validate` before any deployment.**
+- **Local Execution:** Databricks Connect is configured locally in `~/.databrickscfg`. Run test scripts directly in the terminal (e.g., `uv run python script.py`) to execute on the default cluster (`0331-043814-ghylcr28`). Do not hardcode cluster IDs.
 - **Every feature branch must reference a Linear ticket.** Before invoking `using-git-worktrees`, look up or create a ticket in the "Trading Databricks" Linear project using the `linear-server` MCP. Use the ticket ID in the branch name and every commit.
 
 ## Boundaries
