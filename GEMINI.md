@@ -35,12 +35,16 @@ Use the `linear-server` MCP to look up an existing open ticket or create a new o
 - Search: list issues in the "Trading Databricks" project
 - Create: if no ticket exists for this work, create one in the `TRD` team and note the identifier
 
-### Branch naming
-```
+### Branch naming (CRITICAL FOR CI)
+**DO NOT use Linear's default `gitBranchName` (e.g., `username/trd-NNN-desc`). It will fail the CI pipeline.**
+
+When checking out a new branch (via `git checkout -b` or `using-git-worktrees`), you MUST manually construct the branch name following this exact regex: `^(feat|fix|chore|docs|test|refactor)/TRD-[0-9]+-[a-z0-9-]+$`
+
+```text
 type/TRD-NNN-short-description
 ```
 - `type`: `feat` | `fix` | `chore` | `docs` | `test` | `refactor`
-- `TRD-NNN`: Linear ticket identifier (e.g. `TRD-1`)
+- `TRD-NNN`: Linear ticket identifier (**MUST be uppercase `TRD`**, e.g., `TRD-1`)
 - `short-description`: lowercase, hyphen-separated, ≤ 5 words
 
 **Examples:**
