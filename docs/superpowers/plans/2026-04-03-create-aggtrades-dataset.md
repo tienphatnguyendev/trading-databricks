@@ -1,5 +1,7 @@
 # Create Raw Bronze AggTrades Dataset Implementation Plan
 
+**Status:** ✅ FINISHED
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Upload a local 4.5GB CSV of Binance aggTrades data to a Databricks Unity Catalog Volume, then use a PySpark script to ingest and transform it into a bronze table (`trading-signal-gen-dev.bronze.raw_aggTrades_samples`) that conforms to the `TICKS_RAW_SCHEMA`.

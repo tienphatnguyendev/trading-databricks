@@ -15,10 +15,10 @@ jobs:
       - name: Check branch naming convention
         run: |
           BRANCH="${{ github.head_ref }}"
-          if [[ ! "$BRANCH" =~ ^(feat|fix|chore|docs|test|refactor)/TRD-[0-9]+-[a-z0-9-]+$ ]]; then
+          if [[ ! "$BRANCH" =~ ^(feat|fix|chore|docs|test|refactor)/[A-Z]+-[0-9]+-[a-zA-Z0-9-]+$ ]]; then
             echo "Branch '$BRANCH' does not follow convention."
-            echo "Required format: type/TRD-NNN-short-desc"
-            echo "Example: feat/TRD-42-add-news-silver-layer"
+            echo "Required format: type/TICKET-ID-short-desc"
+            echo "Example: feat/SOLO-175-v2-mastery-brief-pipeline"
             exit 1
           fi
           echo "Branch name '$BRANCH' is valid."

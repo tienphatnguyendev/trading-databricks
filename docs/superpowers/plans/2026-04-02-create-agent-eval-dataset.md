@@ -1,5 +1,7 @@
 # Create Raw Bronze Agent Evaluation Dataset Implementation Plan
 
+**Status:** ✅ FINISHED
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Create a static, curated sample dataset of raw Bronze news records in the Databricks dev catalog (`trading-signal-gen-dev.bronze.news_agent_eval_dataset`) to use for agent development and evaluation.

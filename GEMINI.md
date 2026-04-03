@@ -12,6 +12,8 @@ This is the **Databricks transformation and feature engineering platform** for t
 - **Gold Delta table schemas are contracts.** Field renames or removals require explicit approval.
 - **Tests must pass before claiming work is done.** Run `uv run pytest` and verify output.
 - **Run `databricks bundle validate` before any deployment.**
+- **Local Execution:** Databricks Connect is configured locally in `~/.databrickscfg`. Run test scripts directly in the terminal (e.g., `uv run python script.py`) to execute on the default cluster (`0331-043814-ghylcr28`). Do not hardcode cluster IDs.
+- **Every feature branch must reference a Linear ticket.** Before invoking `using-git-worktrees`, look up or create a ticket in the "Trading Databricks" Linear project using the `linear-server` MCP. Use the ticket ID in the branch name and every commit.
 
 ## Boundaries
 
@@ -22,6 +24,50 @@ This is the **Databricks transformation and feature engineering platform** for t
 | Write to Delta via SDP pipelines | Change bar construction thresholds | Push directly to `main` |
 | Run all tests before marking done | Add new pyproject.toml dependencies | Write to S3 from this repo |
 | Preserve gold layer Delta schemas | Change cluster node types | Mix news and tick domain code |
+| Verify Linear ticket exists before branching | Create Linear ticket for unplanned/exploratory work | Start a feature branch without a Linear ticket |
+
+## Development Workflow
+
+Every feature must trace to a Linear ticket in the **Trading Databricks** project (projectID: `bd63748f-7b85-4aa4-b67f-f26430a65a7f`,team: `data-sci-bro`, identifier prefix: `TRD`).
+
+### Step 1 — Before creating a branch
+Use the `linear-server` MCP to look up an existing open ticket or create a new one:
+- Search: list issues in the "Trading Databricks" project
+- Create: if no ticket exists for this work, create one in the `TRD` team and note the identifier
+
+### Branch naming (CRITICAL FOR CI)
+You MUST construct the branch name manually using the format: `type/TICKET-ID-short-description`. Do NOT use Linear's default `username/ticket-desc` format.
+
+```text
+type/TICKET-ID-short-description
+```
+- `type`: `feat` | `fix` | `chore` | `docs` | `test` | `refactor`
+- `TICKET-ID`: Linear ticket identifier in uppercase (e.g., `TRD-1` or `SOLO-175`)
+- `short-description`: lowercase, hyphen-separated
+
+**Examples:**
+```
+feat/SOLO-175-v2-mastery-brief-pipeline
+fix/TRD-2-tick-timestamp-cast
+```
+
+### Commit format
+```
+TRD-NNN type: short imperative description
+```
+**Examples:**
+```
+TRD-12 refactor: add SDP pipeline for news domain
+TRD-1 test: add silver news pytest assertions
+TRD-2 fix: correct tick timestamp timezone cast
+```
+
+### Superpowers workflow integration
+The ticket lookup step sits between `writing-plans` and `using-git-worktrees`:
+```
+brainstorming → writing-plans → [look up/create Linear ticket via MCP] → using-git-worktrees → subagent-driven-development → finishing-a-development-branch
+```
+One ticket per branch. Never mix multiple ticket IDs on a single branch.
 
 ## Commands
 
