@@ -1,176 +1,100 @@
 # trading-databricks
 
-This is the **Databricks transformation and feature engineering platform** for the algorithmic trading system. It ingests financial news and BTC-USDT tick data from S3 (written by `news-scraper-aws` and `tick-scraper-aws`), transforms to medallion layers (bronze → silver → gold), constructs alternative bars, and serves features for ML models and gen-AI agent pipelines.
+Databricks transformation & feature engineering for the algorithmic trading system.
+
+**Tick data flow:** Binance WebSocket → AWS Kinesis → two paths:
+- **Fast path:** Kinesis → Databricks streaming (real-time services)
+- **Slow path:** Kinesis → S3 → Auto Loader → Databricks (batch experiments & research)
+
+**News data** is ingested from S3 via Auto Loader.
 
 **This repo reads from S3 — it never writes to it.**
 
+**Current stage sample datasets** (must use these for ML & MAS development):
+- `trading-signal-gen-dev.bronze.news_agent_eval_dataset`
+- `trading-signal-gen-dev.bronze.raw_aggtrades_samples`
+
+## 🔍 First Thing Every Session
+
+Before writing any code, orient yourself. This takes 2 minutes and prevents hours of wrong assumptions:
+
+1. **Databricks MCP** — use `execute_sql` to inspect catalog contents (`` SHOW SCHEMAS IN `trading-signal-gen-dev` ``), check pipeline states, and verify table freshness.
+2. **Read the latest spec** — `docs/superpowers/specs/` (most recent date wins).
+3. **Check coordination** — `ls docs/coordination/` for your ticket's file. If one exists, **read it fully** before coding — it tells you what other agents have built, what APIs they export, and what files they own. Update your section during/after work. See `docs/coordination/_TEMPLATE.md` for the format.
+
+Trust the tools. Verify state before acting.
+
 ## Non-Negotiable Rules
 
-- **Code style:** Follow `docs/python-programing-rules.md`. It is the authority on all Python idioms.
-- **No secrets in code:** Credentials go in Databricks secrets or Unity Catalog credentials only.
+- **Code style:** Read `docs/python-programing-rules.md` **before writing any code** — it is the authority on all Python idioms. Every implementation must conform.
+- **Research before implementing:** For any new, uncommon, or unfamiliar framework/technology, use web search or available MCP tools to read the **latest official documentation** before writing code. Never guess at APIs.
+- **No secrets in code.** Credentials go in Databricks secrets or Unity Catalog credentials only.
 - **Never modify `databricks.yml` targets without explicit user approval.**
 - **Gold Delta table schemas are contracts.** Field renames or removals require explicit approval.
-- **Tests must pass before claiming work is done.** Run `uv run pytest` and verify output.
+- **Tests must pass before claiming work is done.** Run `uv run pytest` and verify.
 - **Run `databricks bundle validate` before any deployment.**
-- **Local Execution:** Databricks Connect is configured locally in `~/.databrickscfg`. Run test scripts directly in the terminal (e.g., `uv run python script.py`) to execute on the default cluster (`0331-043814-ghylcr28`). Do not hardcode cluster IDs.
-- **Every feature branch must reference a Linear ticket.** Before invoking `using-git-worktrees`, look up or create a ticket in the "Trading Databricks" Linear project using the `linear-server` MCP. Use the ticket ID in the branch name and every commit.
+- **Local execution:** Databricks Connect configured in `~/.databrickscfg`. Use dev cluster `0331-043814-ghylcr28` for MCP testing.
+- **Every feature branch must reference a Linear ticket.**
 
 ## Boundaries
 
 | Always | Ask First | Never |
 |--------|-----------|-------|
-| Follow `python-programing-rules.md` | Modify `databricks.yml` targets | Hardcode secrets or credentials |
-| Keep each domain isolated (news, ticks, ml, agents) | Add new job/pipeline definitions | Delete production Delta tables |
+| Follow `python-programing-rules.md` | Modify `databricks.yml` targets | Hardcode secrets |
+| Keep domains isolated (news, ticks, ml, agents) | Add new job/pipeline definitions | Delete production Delta tables |
 | Write to Delta via SDP pipelines | Change bar construction thresholds | Push directly to `main` |
-| Run all tests before marking done | Add new pyproject.toml dependencies | Write to S3 from this repo |
+| Run all tests before marking done | Add new pyproject.toml deps | Write to S3 from this repo |
 | Preserve gold layer Delta schemas | Change cluster node types | Mix news and tick domain code |
-| Verify Linear ticket exists before branching | Create Linear ticket for unplanned/exploratory work | Start a feature branch without a Linear ticket |
+| Verify Linear ticket before branching | Create ticket for unplanned work | Branch without a Linear ticket |
 
-## Development Workflow
+## Databricks Development Workflow
 
-Every feature must trace to a Linear ticket in the **Trading Databricks** project (projectID: `bd63748f-7b85-4aa4-b67f-f26430a65a7f`,team: `data-sci-bro`, identifier prefix: `TRD`).
+1. **Pure transforms** — test locally: `uv run pytest`. No cluster needed.
+2. **Cluster-dependent code** — write a local script, then execute via Databricks MCP:
+   - `run_python_file_on_databricks(file_path="<local_path>", cluster_id="0331-043814-ghylcr28")`
+   - Reuse the returned `context_id` in follow-up calls for faster iteration.
+3. **SQL inspection** — use `execute_sql` (SQL warehouse, no cluster needed):
+   - Verify table contents, schemas, row counts, pipeline states.
+4. **SDP pipeline testing** — deploy and trigger via terminal:
+   - `databricks bundle validate` → `databricks bundle deploy -t dev` → `databricks bundle run <pipeline_name> -t dev`
 
-### Step 1 — Before creating a branch
-Use the `linear-server` MCP to look up an existing open ticket or create a new one:
-- Search: list issues in the "Trading Databricks" project
-- Create: if no ticket exists for this work, create one in the `TRD` team and note the identifier
+**Parallel coordination:** When working alongside other agents, you **must** follow session step 3 above. Read and update `docs/coordination/<TICKET-ID>-<description>.md` from the **main worktree** path (not your worktree). Never edit another agent's section — only update your own with status, modified files, and exported APIs.
+
+## Linear Integration
+
+Project: **Trading Databricks** — ID: `bd63748f-7b85-4aa4-b67f-f26430a65a7f`, team: `data-sci-bro`, prefix: `TRD`.
+
+Use the `linear-server` MCP to look up or create a ticket before branching.
 
 ### Branch naming (CRITICAL FOR CI)
-You MUST construct the branch name manually using the format: `type/TICKET-ID-short-description`. Do NOT use Linear's default `username/ticket-desc` format.
 
-```text
+```
 type/TICKET-ID-short-description
 ```
 - `type`: `feat` | `fix` | `chore` | `docs` | `test` | `refactor`
-- `TICKET-ID`: Linear ticket identifier in uppercase (e.g., `TRD-1` or `SOLO-175`)
-- `short-description`: lowercase, hyphen-separated
-
-**Examples:**
-```
-feat/SOLO-175-v2-mastery-brief-pipeline
-fix/TRD-2-tick-timestamp-cast
-```
+- `TICKET-ID`: uppercase (e.g., `TRD-1`, `SOLO-175`)
+- Examples: `feat/SOLO-175-v2-mastery-brief-pipeline`, `fix/TRD-2-tick-timestamp-cast`
 
 ### Commit format
+
 ```
 TRD-NNN type: short imperative description
 ```
-**Examples:**
-```
-TRD-12 refactor: add SDP pipeline for news domain
-TRD-1 test: add silver news pytest assertions
-TRD-2 fix: correct tick timestamp timezone cast
-```
 
-### Superpowers workflow integration
-The ticket lookup step sits between `writing-plans` and `using-git-worktrees`:
-```
-brainstorming → writing-plans → [look up/create Linear ticket via MCP] → using-git-worktrees → subagent-driven-development → finishing-a-development-branch
-```
-One ticket per branch. Never mix multiple ticket IDs on a single branch.
+### Workflow order
 
-## Commands
+`brainstorming → writing-plans → [Linear ticket] → using-git-worktrees → subagent-driven-development → finishing-a-development-branch` — one ticket per branch, never mix IDs.
 
-```bash
-uv sync --extra dev                              # Install / sync dependencies
-uv run pytest                                    # Run full test suite
-uv run pytest -x -v                              # Stop on first failure, verbose
-uv run pytest tests/news/                        # Run news domain tests only
-uv run pytest tests/ticks/                       # Run tick domain tests only
-uv run pytest tests/ml/                          # Run ML domain tests only
-uv run pytest tests/common/                      # Run shared utilities tests only
-databricks bundle validate                       # Validate DABs bundle config
-databricks bundle deploy -t dev                  # Deploy to trading-signal-gen-dev catalog
-databricks bundle deploy -t staging              # Deploy to trading-signal-gen-staging catalog
-databricks bundle run news_pipeline -t dev       # Run news SDP pipeline in dev
-databricks bundle run tick_pipeline -t dev       # Run tick SDP pipeline in dev
-databricks bundle run ml_pipeline -t dev         # Run ML feature SDP pipeline in dev
-```
+## S3 Data Contracts (incoming — do not change)
 
-## Repo Navigation
+- News: `s3://trading-signal-gen-data/news/{source}/year=YYYY/month=MM/day=DD/{batch_id}.ndjson`
+- Ticks: `s3://trading-signal-gen-data/ticks/binance/symbol={symbol}/year=YYYY/month=MM/day=DD/{batch_id}.ndjson`
 
-```
-src/trading_databricks/        # Python package — all production code
-  news/                        # News domain (news-scraper-aws S3 output)
-    pipeline.py                # SDP: @dp.table / @dp.materialized_view wrappers (NOT locally testable)
-    bronze.py                  # Pure transforms: enrich_bronze()
-    silver.py                  # Pure transforms: cast_timestamps(), normalize_text(), clean_news(), …
-    gold.py                    # Pure transforms: sentiment, entities (stubs — TRD-4)
-    schemas.py                 # StructType definitions for news NDJSON contract
-    expectations.py            # SDP quality rule strings (@dp.expect_or_drop)
-  ticks/                       # Tick domain (tick-scraper-aws S3 output)
-    pipeline.py                # SDP: @dp.table / @dp.materialized_view wrappers
-    bronze.py                  # Pure transforms: enrich_bronze()
-    silver.py                  # Pure transforms: cast_types(), compute_dollar_value(), clean_ticks()
-    gold/                      # Sub-package: 4 bar algorithms (stubs — TRD-5)
-      dollar_bars.py           # build_dollar_bars()
-      volume_bars.py           # build_volume_bars()
-      tick_imbalance_bars.py   # build_tick_imbalance_bars()
-      dollar_imbalance_bars.py # build_dollar_imbalance_bars()
-    schemas.py                 # StructType definitions for tick NDJSON + bar schemas
-    expectations.py            # SDP quality rule strings
-  ml/                          # ML domain (stubs — TBD)
-    pipeline.py                # SDP: @dp.materialized_view for feature tables
-    features.py                # Pure feature engineering transforms
-    jobs/train.py              # Non-SDP: MLflow model training job entry point
-  agents/                      # Gen-AI domain (stubs — TRD-6)
-    tools.py                   # UC function tools, retrieval logic
-    serve.py                   # Agent endpoint configuration
-  common/                      # Shared utilities
-    config.py                  # @dataclass: DollarBarConfig, VolumeBarConfig, …
-    quality.py                 # Shared SDP expectation helper functions
-    types.py                   # Shared type aliases
-tests/                         # pytest suite — mirrors src/trading_databricks/
-  conftest.py                  # DatabricksSession.builder.serverless() fixture
-  news/                        # News domain tests
-  ticks/                       # Tick domain tests
-  ml/                          # ML domain tests
-  common/                      # Shared utilities tests
-resources/                     # DABs pipeline and job definitions
-  news_pipeline.pipeline.yml   # News SDP pipeline resource
-  tick_pipeline.pipeline.yml   # Tick SDP pipeline resource
-  ml_pipeline.pipeline.yml     # ML feature SDP pipeline resource
-databricks.yml                 # DABs bundle config — do not modify targets without approval
-docs/superpowers/
-  specs/                       # Design docs — read before architectural decisions
-  plans/                       # Implementation plans — use most recent for each feature
-```
+Schemas defined in the upstream repos (`news-scraper-aws`, `tick-scraper-aws`).
 
-## Working with Specs and Plans
+## Architecture Decisions (not in code — must know)
 
-- Before architectural decisions, read `docs/superpowers/specs/project-spec.md` and `docs/superpowers/specs/2026-03-31-sdp-architecture-design.md`.
-- Before implementing a feature, check `docs/superpowers/plans/` for the relevant plan.
-- Plans are dated (`YYYY-MM-DD-<topic>.md`) — use the most recent one.
-- New features: brainstorm first → design doc → implementation plan → execute.
-
-## Coding Standards
-
-Follow `python-programing-rules.md` (Fluent Python idioms). Project-specific:
-
-- **SDP pipelines:** `from pyspark import pipelines as dp`. `pipeline.py` files contain **only** `@dp.table` / `@dp.materialized_view` / `dp.create_auto_cdc_flow` calls. No transformation logic in `pipeline.py`.
-- **Pure transforms:** All business logic lives in `bronze.py`, `silver.py`, `gold.py` (or `gold/`). These are locally testable with `pytest`.
-- **DataFrame chaining:** Use `DataFrame.transform()` for chaining multiple transformations.
-- **Config objects:** `@dataclass(frozen=True)` for all configuration (e.g. `DollarBarConfig`).
-- **Keyword-only params:** `*` for all public functions with more than 2 arguments.
-- **Bar construction:** Stateful algorithms (Lopez de Prado) operate on ordered ticks; use `@dp.materialized_view` (full recompute) not streaming tables.
-- **Serverless compute:** All SDP pipelines use `serverless: true`. No classic cluster config.
-
-## Data Contracts
-
-**Incoming (from S3 — do not change):**
-- News: `news/{source}/year=YYYY/month=MM/day=DD/{batch_id}.ndjson` — schema defined in `news-scraper-aws/CLAUDE.md`
-- Ticks: `ticks/binance/symbol={symbol}/year=YYYY/month=MM/day=DD/{batch_id}.ndjson` — schema defined in `tick-scraper-aws/CLAUDE.md`
-
-**Outgoing Delta tables (do not rename or remove fields without explicit approval):**
-
-| Table | Key field(s) | SDP construct | Write mode |
-|-------|-------------|---------------|-----------|
-| `bronze.news_raw` | story_id, scraped_at | Streaming table | Append-only |
-| `silver.news_cleaned` | story_id | Streaming table (AUTO CDC SCD1) | Upsert on story_id |
-| `gold.news_features` | story_id | Materialized view | Full recompute |
-| `bronze.ticks_raw` | trade_id, timestamp | Streaming table | Append-only |
-| `silver.ticks_cleaned` | trade_id | Streaming table | Append-only (streaming) |
-| `gold.dollar_bars` | bar_index | Materialized view | Full recompute |
-| `gold.volume_bars` | bar_index | Materialized view | Full recompute |
-| `gold.tick_imbalance_bars` | bar_index | Materialized view | Full recompute |
-| `gold.dollar_imbalance_bars` | bar_index | Materialized view | Full recompute |
+- **SDP pattern:** `pipeline.py` = only `@dp.table` / `@dp.materialized_view` wrappers. Zero logic. All transforms in `bronze.py`, `silver.py`, `gold.py`.
+- **Bar construction:** Lopez de Prado stateful algorithms → `@dp.materialized_view` (full recompute), not streaming.
+- **Serverless:** All SDP pipelines use `serverless: true`. No classic cluster config.
+- **Specs & plans:** Read `docs/superpowers/specs/` before architectural decisions. Check `docs/superpowers/plans/` before implementing. Plans are dated — use most recent.

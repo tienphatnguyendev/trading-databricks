@@ -1,0 +1,60 @@
+# Parallel Work Coordination — TRD-6: Build Gen-AI Agent Layer
+
+> **Parent issue:** [TRD-6](https://linear.app/aaron-solo/issue/TRD-6/build-gen-ai-agent-layer)
+>
+> Each agent owns ONE section below. Read the full file at session start.
+> Update your section during/after work. Never edit another agent's section.
+>
+> **Cross-worktree access:** Always read/write from the **main worktree** path, not your worktree.
+>
+> **Status values:** `not_started` → `in_progress` → `done` (or `blocked:<reason>`)
+
+---
+
+## Section 1: Schema & Config — TRD-23, TRD-24 (Wave 1)
+- **Status:** not_started
+- **Branch:** —
+- **Modified files:** —
+- **Exports (public APIs):** —
+- **Needs from others:** None (foundation — no dependencies)
+- **Notes:** Must complete before any other section starts. TRD-23 and TRD-24 can run in parallel within this section.
+
+---
+
+## Section 2: Gatekeeper — TRD-25, TRD-26 (Wave 2–3)
+- **Status:** not_started
+- **Branch:** —
+- **Modified files:** —
+- **Exports (public APIs):** —
+- **Needs from others:** `GatekeeperConfig` from Section 1
+- **Notes:** TRD-25 (Stage 1, spaCy NER) is Wave 2. TRD-26 (Stage 2, sklearn) is Wave 3 — blocked until TRD-25 merges.
+
+---
+
+## Section 3: RAG + Extractor — TRD-28, TRD-29 (Wave 2)
+- **Status:** not_started
+- **Branch:** —
+- **Modified files:** —
+- **Exports (public APIs):** —
+- **Needs from others:** `CAUSAL_FEATURES_SCHEMA`, `MASConfig`, `load_taxonomy()`, `load_whitelist()` from Section 1
+- **Notes:** TRD-28 and TRD-29 share a worktree — same agent. Extractor depends on retriever output.
+
+---
+
+## Section 4: Validator + Router + Context — TRD-27, TRD-30, TRD-31 (Wave 2–3)
+- **Status:** not_started
+- **Branch:** —
+- **Modified files:** —
+- **Exports (public APIs):** —
+- **Needs from others:** `MechanismValidatorConfig`, `MECHANISM_WHITELIST_SCHEMA`, `load_whitelist()` from Section 1; TRD-31 also needs `FewShotRetriever` from Section 3
+- **Notes:** TRD-27 is a stub (no-op until TRD-5). TRD-31 is Wave 3, blocked until TRD-28 merges.
+
+---
+
+## Section 5: Integration + Deploy + Eval — TRD-32, TRD-33, TRD-34 (Wave 4–6)
+- **Status:** not_started
+- **Branch:** —
+- **Modified files:** —
+- **Exports (public APIs):** —
+- **Needs from others:** All exports from Sections 1–4
+- **Notes:** Strictly sequential. Cannot start until ALL sections above are done.
