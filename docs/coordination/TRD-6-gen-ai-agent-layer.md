@@ -12,23 +12,23 @@
 ---
 
 ## Section 1: Schema & Config — TRD-23, TRD-24 (Wave 1)
-- **Status:** in_progress
-- **Branch:** feat/TRD-24-mas-config-dataclasses (TRD-24 done, PR pending); feat/TRD-23-mas-schemas-and-taxonomy (TRD-23 in progress)
+- **Status:** done
+- **Branch:** feat/TRD-24-mas-config-dataclasses (merged PR #13), feat/TRD-23-mas-schemas-and-taxonomy (merged PR #14)
 - **Modified files:**
   - `src/trading_databricks/agents/config.py` (NEW)
+  - `src/trading_databricks/agents/schemas.py` (NEW)
+  - `src/trading_databricks/agents/taxonomy.py` (NEW)
+  - `scripts/seed_taxonomy.py` (NEW)
   - `tests/agents/__init__.py` (NEW)
   - `tests/agents/test_config.py` (NEW)
-  - `src/trading_databricks/agents/schemas.py` (NEW — TRD-23)
-  - `src/trading_databricks/agents/taxonomy.py` (NEW — TRD-23)
-  - `scripts/seed_taxonomy.py` (NEW — TRD-23)
-  - `tests/agents/test_schemas.py` (NEW — TRD-23)
-  - `tests/agents/test_taxonomy.py` (NEW — TRD-23)
+  - `tests/agents/test_schemas.py` (NEW)
+  - `tests/agents/test_taxonomy.py` (NEW)
 - **Exports (public APIs):**
   - `config.py`: `GatekeeperConfig`, `UncertaintyRouterConfig`, `MechanismValidatorConfig`, `MASConfig`
-  - `schemas.py`: `CAUSAL_FEATURES_SCHEMA`, `TREATMENT_TAXONOMY_SCHEMA`, `MECHANISM_WHITELIST_SCHEMA`, `DAGNESS_AUDIT_SCHEMA`, `CONFOUNDING_AUDIT_SCHEMA` (TRD-23)
-  - `taxonomy.py`: `seed_taxonomy()`, `load_taxonomy()`, `load_whitelist()`, `TREATMENT_TAXONOMY_SEED`, `MECHANISM_WHITELIST_SEED` (TRD-23)
+  - `schemas.py`: `CAUSAL_FEATURES_SCHEMA`, `TREATMENT_TAXONOMY_SCHEMA`, `MECHANISM_WHITELIST_SCHEMA`, `DAGNESS_AUDIT_SCHEMA`, `CONFOUNDING_AUDIT_SCHEMA`
+  - `taxonomy.py`: `seed_taxonomy()`, `load_taxonomy()`, `load_whitelist()`, `TREATMENT_TAXONOMY_SEED`, `MECHANISM_WHITELIST_SEED`
 - **Needs from others:** None (foundation — no dependencies)
-- **Notes:** TRD-24 done (17 tests pass). TRD-23 in parallel. TRD-24 merges first, TRD-23 rebases and merges second. Both must merge before Wave 2 starts.
+- **Notes:** Both merged. Run `uv run python scripts/seed_taxonomy.py` on cluster 0331-043814-ghylcr28 to seed gold tables (34 taxonomy rows, 40 whitelist rows). Wave 2 can begin.
 
 ---
 
