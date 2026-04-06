@@ -12,12 +12,23 @@
 ---
 
 ## Section 1: Schema & Config — TRD-23, TRD-24 (Wave 1)
-- **Status:** not_started
-- **Branch:** —
-- **Modified files:** —
-- **Exports (public APIs):** —
+- **Status:** in_progress
+- **Branch:** feat/TRD-24-mas-config-dataclasses (TRD-24 done, PR pending); feat/TRD-23-mas-schemas-and-taxonomy (TRD-23 in progress)
+- **Modified files:**
+  - `src/trading_databricks/agents/config.py` (NEW)
+  - `tests/agents/__init__.py` (NEW)
+  - `tests/agents/test_config.py` (NEW)
+  - `src/trading_databricks/agents/schemas.py` (NEW — TRD-23)
+  - `src/trading_databricks/agents/taxonomy.py` (NEW — TRD-23)
+  - `scripts/seed_taxonomy.py` (NEW — TRD-23)
+  - `tests/agents/test_schemas.py` (NEW — TRD-23)
+  - `tests/agents/test_taxonomy.py` (NEW — TRD-23)
+- **Exports (public APIs):**
+  - `config.py`: `GatekeeperConfig`, `UncertaintyRouterConfig`, `MechanismValidatorConfig`, `MASConfig`
+  - `schemas.py`: `CAUSAL_FEATURES_SCHEMA`, `TREATMENT_TAXONOMY_SCHEMA`, `MECHANISM_WHITELIST_SCHEMA`, `DAGNESS_AUDIT_SCHEMA`, `CONFOUNDING_AUDIT_SCHEMA` (TRD-23)
+  - `taxonomy.py`: `seed_taxonomy()`, `load_taxonomy()`, `load_whitelist()`, `TREATMENT_TAXONOMY_SEED`, `MECHANISM_WHITELIST_SEED` (TRD-23)
 - **Needs from others:** None (foundation — no dependencies)
-- **Notes:** Must complete before any other section starts. TRD-23 and TRD-24 can run in parallel within this section.
+- **Notes:** TRD-24 done (17 tests pass). TRD-23 in parallel. TRD-24 merges first, TRD-23 rebases and merges second. Both must merge before Wave 2 starts.
 
 ---
 
