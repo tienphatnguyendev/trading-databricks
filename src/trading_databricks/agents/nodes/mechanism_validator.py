@@ -50,6 +50,25 @@ class ValidationResult(TypedDict):
     evidence_relevance_score: float | None  # [0.0, 1.0] cosine similarity, None on embed failure or empty evidence
 
 
+def _parse_l1_category(treatment_class: str) -> str:
+    """Extract L1 from treatment_class using best-effort parsing.
+
+    Examples:
+        "Regulation.etf_ruling"     → "Regulation"
+        "Regulation"                → "Regulation"  (no dot, return as-is)
+        "Regulation."               → "Regulation"  (trailing dot)
+        "Regulation.etf.extra"      → "Regulation"  (split on first dot)
+        ".etf_ruling"               → ""            (malformed, empty L1)
+        ""                          → ""            (empty input)
+
+    Malformed cases naturally fail at step 2 whitelist lookup.
+    No exceptions raised — let downstream validation catch it.
+    """
+    if "." not in treatment_class:
+        return treatment_class
+    return treatment_class.split(".", maxsplit=1)[0]
+
+
 def validate_extraction(
     extraction: ExtractionInput,
     article_body: str,
