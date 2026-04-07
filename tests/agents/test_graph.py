@@ -1,8 +1,6 @@
 """Tests for agents/graph.py — LangGraph StateGraph assembly."""
 from __future__ import annotations
 
-import json
-import pytest
 from unittest.mock import MagicMock, patch
 
 from trading_databricks.agents.config import MASConfig
