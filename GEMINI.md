@@ -35,6 +35,7 @@ Trust the tools. Verify state before acting.
 - **Run `databricks bundle validate` before any deployment.**
 - **Local execution:** Databricks Connect configured in `~/.databrickscfg`. Use dev cluster `0331-043814-ghylcr28` for MCP testing.
 - **Every feature branch must reference a Linear ticket.**
+- **Task completion & Review:** After finishing *every single task* in an implementation plan written by the superpower writing skill, you **MUST request a code review** and **get explicit user approval** before moving to the next task in the plan.
 
 ## Boundaries
 
