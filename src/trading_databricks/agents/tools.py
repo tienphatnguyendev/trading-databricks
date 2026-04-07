@@ -2,7 +2,73 @@
 
 These tools are registered as UC functions and called by Databricks Agent
 Framework agents to query the gold layer.
-
-TODO: implement after gen-AI agent framework is selected (see TRD-6).
 """
 from __future__ import annotations
+
+from trading_databricks.agents.config import MASConfig
+from trading_databricks.agents.nodes.few_shot_retriever import (
+    STATIC_FEW_SHOT_EXAMPLES,
+    get_accepted_chain_count,
+    get_spark_session,
+    merge_examples,
+    query_vector_search,
+)
+
+
+def retrieve_few_shot_chains(
+    headline: str,
+    *,
+    config: MASConfig | None = None,
+) -> list[dict]:
+    """Retrieve few-shot causal chain examples for a news headline.
+
+    This is a standalone tool wrapper around the few-shot retriever node,
+    providing a simpler interface for testing and non-LangGraph usage.
+
+    Args:
+        headline: Article headline for semantic search
+        config: Optional MASConfig (uses default if not provided)
+
+    Returns:
+        List of 0-5 few-shot examples (dict format matching VS results)
+
+    Cold-start behavior:
+        Returns static examples only if accepted chain count < 50
+
+    Warm-start behavior:
+        Queries Vector Search, merges with static examples
+
+    Example:
+        >>> examples = retrieve_few_shot_chains("Fed raises interest rates")
+        >>> len(examples)
+        5
+        >>> examples[0]["treatment_class"]
+        'Macro.rate_decision'
+    """
+    if config is None:
+        config = MASConfig()
+
+    # Query accepted chain count (cached)
+    spark = get_spark_session()
+    accepted_count = get_accepted_chain_count(
+        spark,
+        catalog=config.catalog,
+        schema=config.schema,
+    )
+
+    # Cold-start guard
+    if accepted_count < config.router.min_index_size:
+        return STATIC_FEW_SHOT_EXAMPLES
+
+    # Warm path: query VS and merge
+    dynamic_results = query_vector_search(
+        headline,
+        index_name=config.vs_index_name,
+        num_results=5,
+    )
+
+    return merge_examples(
+        dynamic_results,
+        STATIC_FEW_SHOT_EXAMPLES,
+        max_total=5,
+    )

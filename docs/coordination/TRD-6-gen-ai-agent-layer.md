@@ -49,22 +49,40 @@
 ---
 
 ## Section 3: RAG + Extractor — TRD-28, TRD-29 (Wave 2)
-- **Status:** not_started
-- **Branch:** —
-- **Modified files:** —
-- **Exports (public APIs):** —
-- **Needs from others:** `CAUSAL_FEATURES_SCHEMA`, `MASConfig`, `load_taxonomy()`, `load_whitelist()` from Section 1
-- **Notes:** TRD-28 and TRD-29 share a worktree — same agent. Extractor depends on retriever output.
+- **Status:** in_progress (TRD-28 done, TRD-29 pending)
+- **Branch:** main (TRD-28 merged)
+- **Modified files:**
+  - `src/trading_databricks/agents/nodes/__init__.py` (NEW)
+  - `src/trading_databricks/agents/nodes/few_shot_retriever.py` (NEW)
+  - `src/trading_databricks/agents/tools.py` (MODIFIED)
+  - `scripts/provision_vector_search.py` (NEW)
+  - `tests/agents/test_few_shot_retriever.py` (NEW)
+- **Exports (public APIs):**
+  - `nodes/few_shot_retriever.py`: `few_shot_retriever(state, config)` — LangGraph node
+  - `nodes/few_shot_retriever.py`: `STATIC_FEW_SHOT_EXAMPLES` — 5 hardcoded examples
+  - `tools.py`: `retrieve_few_shot_chains(headline)` — callable tool
+- **Needs from others:** ✅ All Wave 1 exports available
+- **Provides to others:**
+  - `few_shot_examples` state field for TRD-29 (Extractor)
+  - `retrieval_story_ids` for lineage tracking
+  - Static examples for TRD-31 (Router) similarity fallback
+- **Notes:** VS infrastructure provisioned via `scripts/provision_vector_search.py --env dev`. Cold-start guard triggers at < 50 accepted chains. TRD-29 extractor implementation pending.
 
 ---
 
 ## Section 4: Validator + Router + Context — TRD-27, TRD-30, TRD-31 (Wave 2–3)
-- **Status:** not_started
-- **Branch:** —
-- **Modified files:** —
-- **Exports (public APIs):** —
-- **Needs from others:** `MechanismValidatorConfig`, `MECHANISM_WHITELIST_SCHEMA`, `load_whitelist()` from Section 1; TRD-31 also needs `FewShotRetriever` from Section 3
-- **Notes:** TRD-27 is a stub (no-op until TRD-5). TRD-31 is Wave 3, blocked until TRD-28 merges.
+- **Status:** in_progress (TRD-30 done, TRD-27/TRD-31 not started)
+- **Branch:** feat/TRD-30-mechanism-validator
+- **Modified files:**
+  - `src/trading_databricks/agents/nodes/__init__.py` (MODIFIED - added validate_extraction export)
+  - `src/trading_databricks/agents/nodes/mechanism_validator.py` (NEW)
+  - `tests/agents/test_mechanism_validator.py` (NEW)
+- **Exports (public APIs):**
+  - `nodes.validate_extraction(extraction, article_body, whitelist, config, embed_fn) -> ValidationResult`
+  - `nodes.mechanism_validator.ExtractionInput` (TypedDict)
+  - `nodes.mechanism_validator.ValidationResult` (TypedDict)
+- **Needs from others:** `MechanismValidatorConfig`, `MECHANISM_WHITELIST_SCHEMA`, `load_whitelist()` from Section 1
+- **Notes:** TRD-30 complete. TRD-27 (uncertainty router) is a no-op stub until TRD-5. TRD-31 (context retriever) is Wave 3, blocked until TRD-28 merges. Ready for LangGraph integration in TRD-32.
 
 ---
 

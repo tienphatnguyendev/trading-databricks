@@ -27,6 +27,7 @@ Trust the tools. Verify state before acting.
 ## Non-Negotiable Rules
 
 - **Code style:** Read `docs/python-programing-rules.md` **before writing any code** — it is the authority on all Python idioms. Every implementation must conform.
+- **Polars, not pandas:** All single-node DataFrame work in the `ml/` domain **must** use Polars (`import polars as pl`). Never use pandas for ML pipeline code. This applies to CUSUM detection, labeling, feature engineering, training data prep, bet sizing, and any other non-Spark transforms. When bridging Spark ↔ Polars, use Arrow: `pl.from_arrow(spark_df.collect().to_arrow())` or `spark.createDataFrame(polars_df.to_arrow())`. The only exception is interfacing with libraries that require pandas (e.g., scikit-learn `.fit()` — convert at the boundary with `.to_pandas()`).
 - **Research before implementing:** For any new, uncommon, or unfamiliar framework/technology, use web search or available MCP tools to read the **latest official documentation** before writing code. Never guess at APIs.
 - **No secrets in code.** Credentials go in Databricks secrets or Unity Catalog credentials only.
 - **Never modify `databricks.yml` targets without explicit user approval.**
