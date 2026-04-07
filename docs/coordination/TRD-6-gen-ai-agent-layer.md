@@ -71,24 +71,27 @@
 ---
 
 ## Section 4: Validator + Router + Context — TRD-27, TRD-30, TRD-31 (Wave 2–3)
-- **Status:** in_progress (TRD-27 and TRD-30 done, TRD-31 not started)
-- **Branch:** feat/TRD-30-mechanism-validator, aaronngdev/trd-27-w2-implement-context_retriever-node-returns-null-market (merged PR #17)
+- **Status:** done (TRD-27, TRD-30, TRD-31 complete)
+- **Branch:** feat/TRD-30-mechanism-validator, aaronngdev/trd-27-w2-implement-context_retriever-node-returns-null-market (merged PR #17), feat/TRD-31-w3-implement-uncertainty_router-node-module-a-abci-inspired (merged PR #19)
 - **Modified files:**
   - `src/trading_databricks/agents/nodes/__init__.py` (MODIFIED)
   - `src/trading_databricks/agents/nodes/mechanism_validator.py` (NEW)
   - `src/trading_databricks/agents/nodes/context_retriever.py` (NEW)
-  - `src/trading_databricks/agents/state.py` (NEW)
+  - `src/trading_databricks/agents/nodes/uncertainty_router.py` (NEW)
+  - `src/trading_databricks/agents/state.py` (MODIFIED)
   - `src/trading_databricks/agents/tools.py` (MODIFIED)
   - `tests/agents/test_mechanism_validator.py` (NEW)
   - `tests/agents/test_context_retriever.py` (NEW)
-  - `tests/agents/test_state.py` (NEW)
+  - `tests/agents/test_state.py` (MODIFIED)
+  - `tests/agents/test_uncertainty_router.py` (NEW)
 - **Exports (public APIs):**
   - `nodes.validate_extraction`
   - `nodes.context_retriever`
+  - `nodes.uncertainty_router`
   - `state.MASState` (TypedDict)
   - `tools.fetch_market_context`
-- **Needs from others:** `MechanismValidatorConfig`, `MECHANISM_WHITELIST_SCHEMA`, `load_whitelist()` from Section 1
-- **Notes:** TRD-30 complete. TRD-27 (context retriever) is complete as a no-op stub returning `None` until TRD-5. TRD-31 is Wave 3, blocked until TRD-28 merges. Ready for LangGraph integration in TRD-32.
+- **Needs from others:** `MechanismValidatorConfig`, `UncertaintyRouterConfig`, `MECHANISM_WHITELIST_SCHEMA`, `load_whitelist()` from Section 1
+- **Notes:** TRD-30 complete. TRD-27 (context retriever) is complete as a no-op stub returning `None` until TRD-5. TRD-31 is complete and merged (PR #19). Ready for LangGraph integration in TRD-32.
 
 ---
 
