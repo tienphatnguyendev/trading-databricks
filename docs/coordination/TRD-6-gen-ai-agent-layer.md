@@ -49,8 +49,8 @@
 ---
 
 ## Section 3: RAG + Extractor — TRD-28, TRD-29 (Wave 2)
-- **Status:** in_progress (TRD-28 done, TRD-29 pending)
-- **Branch:** main (TRD-28 merged)
+- **Status:** done (TRD-28 done, TRD-29 done)
+- **Branch:** main (both merged)
 - **Modified files:**
   - `src/trading_databricks/agents/nodes/__init__.py` (NEW)
   - `src/trading_databricks/agents/nodes/few_shot_retriever.py` (NEW)
@@ -96,9 +96,9 @@
 ---
 
 ## Section 5: Integration + Deploy + Eval — TRD-32, TRD-33, TRD-34 (Wave 4–6)
-- **Status:** not_started
-- **Branch:** —
-- **Modified files:** —
-- **Exports (public APIs):** —
-- **Needs from others:** All exports from Sections 1–4
-- **Notes:** Strictly sequential. Cannot start until ALL sections above are done.
+- **Status:** in_progress
+- **Branch:** feat/TRD-32-w4-wire-langgraph-pipeline
+- **Modified files:** (updating as work progresses)
+- **Exports (public APIs):** agents/graph.py: `build_mas_graph`, `route_article`
+- **Needs from others:** All exports from Sections 1–4 ✅
+- **Notes:** TRD-32 in progress. Implements graph.py, tools.py addition, gold.py, pipeline.py.
