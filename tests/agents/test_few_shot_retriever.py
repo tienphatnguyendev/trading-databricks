@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import time
 from unittest.mock import MagicMock, patch
 
@@ -13,7 +14,9 @@ from trading_databricks.agents.nodes.few_shot_retriever import (
     get_accepted_chain_count,
     merge_examples,
     query_vector_search,
+    MASState,
 )
+from trading_databricks.agents.config import MASConfig
 from trading_databricks.agents.taxonomy import MECHANISM_WHITELIST_SEED
 
 
@@ -305,3 +308,94 @@ class TestMergeExamples:
 
         assert len(result) == 3
         assert all(ex["story_id"].startswith("dyn-") for ex in result)
+
+
+class TestFewShotRetrieverNode:
+    """Integration tests for the full few_shot_retriever node."""
+
+    def test_cold_start_returns_static(self, monkeypatch):
+        """count < min_index_size -> returns static examples only."""
+        # Clear cache
+        _accepted_count_cache.clear()
+
+        # Mock Spark to return count < 50
+        mock_spark = MagicMock()
+        mock_result = MagicMock()
+        mock_result.collect.return_value = [(25,)]
+        mock_spark.sql.return_value = mock_result
+
+        def mock_get_spark():
+            return mock_spark
+
+        few_shot_retriever_module = sys.modules["trading_databricks.agents.nodes.few_shot_retriever"]
+        monkeypatch.setattr(few_shot_retriever_module, "get_spark_session", mock_get_spark)
+
+        # Import after patching to get the patched function
+        from trading_databricks.agents.nodes.few_shot_retriever import few_shot_retriever
+
+        # Input state
+        state: MASState = {
+            "headline": "Bitcoin price surges",
+            "few_shot_examples": [],
+            "retrieval_story_ids": [],
+        }
+        config = MASConfig()
+
+        # Call node
+        result = few_shot_retriever(state, config)
+
+        # Verify cold-start: returns static only
+        assert len(result["few_shot_examples"]) == 5
+        assert all("static-example" in ex["story_id"] for ex in result["few_shot_examples"])
+        assert result["retrieval_story_ids"] == []
+
+        _accepted_count_cache.clear()
+
+    def test_warm_start_queries_vs(self, monkeypatch):
+        """count >= min_index_size -> queries VS, merges dynamic + static."""
+        _accepted_count_cache.clear()
+
+        # Mock Spark to return count >= 50
+        mock_spark = MagicMock()
+        mock_result = MagicMock()
+        mock_result.collect.return_value = [(75,)]
+        mock_spark.sql.return_value = mock_result
+
+        def mock_get_spark():
+            return mock_spark
+
+        # Mock VS query to return 2 dynamic results
+        def mock_query_vs_index(*args, **kwargs):
+            return [
+                {"story_id": "dyn-1", "treatment_class": "Macro.rate_decision"},
+                {"story_id": "dyn-2", "treatment_class": "Regulation.etf_ruling"},
+            ]
+
+        few_shot_retriever_module = sys.modules["trading_databricks.agents.nodes.few_shot_retriever"]
+        monkeypatch.setattr(few_shot_retriever_module, "get_spark_session", mock_get_spark)
+        monkeypatch.setattr(few_shot_retriever_module, "query_vs_index", mock_query_vs_index)
+
+        # Import after patching
+        from trading_databricks.agents.nodes.few_shot_retriever import few_shot_retriever
+
+        # Input state
+        state: MASState = {
+            "headline": "Fed raises interest rates",
+            "few_shot_examples": [],
+            "retrieval_story_ids": [],
+        }
+        config = MASConfig()
+
+        # Call node
+        result = few_shot_retriever(state, config)
+
+        # Verify warm-start: 2 dynamic + 3 static
+        assert len(result["few_shot_examples"]) == 5
+        assert result["few_shot_examples"][0]["story_id"] == "dyn-1"
+        assert result["few_shot_examples"][1]["story_id"] == "dyn-2"
+        assert "static-example" in result["few_shot_examples"][2]["story_id"]
+
+        # Verify lineage tracking (only dynamic story IDs)
+        assert result["retrieval_story_ids"] == ["dyn-1", "dyn-2"]
+
+        _accepted_count_cache.clear()

@@ -7,8 +7,25 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import TypedDict
+
+from trading_databricks.agents.config import MASConfig
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Type hints
+# ---------------------------------------------------------------------------
+class MASState(TypedDict, total=False):
+    """Type hint for MAS LangGraph state (partial definition).
+
+    total=False makes all fields optional, as this is only the portion
+    managed by the few-shot retriever node.
+    """
+    headline: str
+    few_shot_examples: list[dict]
+    retrieval_story_ids: list[str]
 
 
 # ---------------------------------------------------------------------------
@@ -239,6 +256,89 @@ def merge_examples(
     return result
 
 
-def few_shot_retriever():
-    """Placeholder for few-shot retriever node implementation."""
-    raise NotImplementedError("few_shot_retriever node not yet implemented")
+# ---------------------------------------------------------------------------
+# Spark session helper
+# ---------------------------------------------------------------------------
+def get_spark_session():
+    """Get Spark session (placeholder for Databricks Connect).
+
+    In production, this will be replaced with actual Databricks Connect
+    session via environment setup. For testing, this gets monkeypatched.
+
+    Raises:
+        NotImplementedError: When called without Databricks Connect setup.
+    """
+    raise NotImplementedError("get_spark_session must be provided by Databricks Connect")
+
+
+# ---------------------------------------------------------------------------
+# LangGraph node
+# ---------------------------------------------------------------------------
+def few_shot_retriever(state: MASState, config: MASConfig) -> MASState:
+    """Retrieve few-shot examples for the Causality Extractor.
+
+    This LangGraph node queries the Vector Search index for similar
+    accepted causal chains and merges them with static fallback examples.
+
+    Args:
+        state: MASState with 'headline' field
+        config: MASConfig with VS settings and router.min_index_size
+
+    Returns:
+        Updated MASState with:
+        - few_shot_examples: list of 0-5 example dicts (VS result format)
+        - retrieval_story_ids: list of story_id values from dynamic results only
+
+    Cold-start guard:
+        If accepted chain count < config.router.min_index_size (50),
+        returns static examples only (no VS query).
+
+    Warm path:
+        Queries VS, merges dynamic results with static fallback (up to 5 total).
+    """
+    headline = state["headline"]
+
+    # Step 1: Query accepted chain count (cached 5 minutes)
+    spark = get_spark_session()
+    accepted_count = get_accepted_chain_count(
+        spark,
+        catalog=config.catalog,
+        schema=config.schema,
+    )
+
+    # Step 2: Cold-start guard
+    if accepted_count < config.router.min_index_size:
+        logger.info(
+            f"Cold start: {accepted_count} < {config.router.min_index_size}, "
+            f"using static examples only"
+        )
+        state["few_shot_examples"] = STATIC_FEW_SHOT_EXAMPLES
+        state["retrieval_story_ids"] = []
+        return state
+
+    # Step 3: Query VS (warm path)
+    logger.info(f"Warm start: {accepted_count} chains available, querying VS")
+    dynamic_results = query_vector_search(
+        headline,
+        index_name=config.vs_index_name,
+        num_results=5,
+    )
+
+    # Step 4: Merge dynamic + static
+    merged_examples = merge_examples(
+        dynamic_results,
+        STATIC_FEW_SHOT_EXAMPLES,
+        max_total=5,
+    )
+
+    # Step 5: Update state
+    state["few_shot_examples"] = merged_examples
+    state["retrieval_story_ids"] = [ex["story_id"] for ex in dynamic_results]
+
+    logger.info(
+        f"Retrieved {len(dynamic_results)} dynamic + "
+        f"{len(merged_examples) - len(dynamic_results)} static = "
+        f"{len(merged_examples)} total examples"
+    )
+
+    return state

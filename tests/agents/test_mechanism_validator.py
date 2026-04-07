@@ -8,6 +8,8 @@ from trading_databricks.agents.config import MechanismValidatorConfig
 from trading_databricks.agents.nodes.mechanism_validator import (
     ExtractionInput,
     ValidationResult,
+    _compute_evidence_relevance,
+    _cosine_similarity,
     _parse_l1_category,
     _validate_evidence_spans,
 )
@@ -93,3 +95,103 @@ def test_validate_evidence_spans_fabricated_evidence():
     assert not _validate_evidence_spans(
         ["ethereum price drops"], "The SEC approved the Bitcoin ETF"
     )
+
+
+# ===== _cosine_similarity tests =====
+
+
+def test_cosine_similarity_identical_vectors():
+    """Identical vectors → similarity = 1.0."""
+    vec = [1.0, 2.0, 3.0]
+    assert _cosine_similarity(vec, vec) == 1.0
+
+
+def test_cosine_similarity_orthogonal_vectors():
+    """Orthogonal vectors → similarity = 0.0."""
+    vec_a = [1.0, 0.0, 0.0]
+    vec_b = [0.0, 1.0, 0.0]
+    assert _cosine_similarity(vec_a, vec_b) == 0.0
+
+
+def test_cosine_similarity_opposite_vectors():
+    """Opposite vectors → clamped to 0.0 (not -1.0)."""
+    vec_a = [1.0, 2.0, 3.0]
+    vec_b = [-1.0, -2.0, -3.0]
+    result = _cosine_similarity(vec_a, vec_b)
+    assert result == 0.0  # Clamped
+
+
+def test_cosine_similarity_zero_length_vectors():
+    """Zero-length vectors → 0.0 (no similarity)."""
+    assert _cosine_similarity([0.0, 0.0, 0.0], [1.0, 2.0, 3.0]) == 0.0
+    assert _cosine_similarity([1.0, 2.0, 3.0], [0.0, 0.0, 0.0]) == 0.0
+
+
+def test_cosine_similarity_similar_vectors():
+    """Similar vectors → 0.0 < similarity < 1.0."""
+    vec_a = [1.0, 2.0, 3.0]
+    vec_b = [1.1, 2.1, 2.9]
+    result = _cosine_similarity(vec_a, vec_b)
+    assert 0.9 < result < 1.0  # Very similar
+
+
+# ===== _compute_evidence_relevance tests =====
+
+
+def test_compute_evidence_relevance_success(mock_embed_fn):
+    """Module B computes score when embeddings succeed."""
+    result = _compute_evidence_relevance(
+        trigger_event="SEC approves ETF",
+        mechanism="regulatory_clarity",
+        evidence_spans=["The SEC approved the first spot ETF"],
+        embed_fn=mock_embed_fn,
+    )
+
+    assert result is not None
+    assert 0.0 <= result <= 1.0
+
+
+def test_compute_evidence_relevance_empty_evidence():
+    """Empty evidence → None immediately, no embed call."""
+    call_count = 0
+
+    def counting_embed_fn(text: str) -> list[float]:
+        nonlocal call_count
+        call_count += 1
+        return [0.0] * 384
+
+    # Empty list
+    result = _compute_evidence_relevance(
+        trigger_event="event",
+        mechanism="mechanism",
+        evidence_spans=[],
+        embed_fn=counting_embed_fn,
+    )
+    assert result is None
+    assert call_count == 0  # Never called
+
+    # Whitespace-only spans
+    result = _compute_evidence_relevance(
+        trigger_event="event",
+        mechanism="mechanism",
+        evidence_spans=["   ", "  \n  "],
+        embed_fn=counting_embed_fn,
+    )
+    assert result is None
+    assert call_count == 0  # Never called
+
+
+def test_compute_evidence_relevance_embed_failure():
+    """When embed_fn raises, return None and log warning."""
+
+    def failing_embed_fn(text: str) -> list[float]:
+        raise TimeoutError("Model endpoint unavailable")
+
+    result = _compute_evidence_relevance(
+        trigger_event="SEC approves ETF",
+        mechanism="regulatory_clarity",
+        evidence_spans=["The SEC approved..."],
+        embed_fn=failing_embed_fn,
+    )
+
+    assert result is None  # Graceful degradation

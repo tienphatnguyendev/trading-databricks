@@ -95,6 +95,94 @@ def _validate_evidence_spans(
     return all(span in normed_body for span in normed_spans)
 
 
+def _cosine_similarity(vec_a: list[float], vec_b: list[float]) -> float:
+    """Compute cosine similarity between two embedding vectors.
+
+    Formula: cos(θ) = (A · B) / (||A|| × ||B||)
+
+    Returns:
+        float in [0.0, 1.0] - clamped to match schema contract
+
+    Clamping rationale:
+        Raw cosine similarity is [-1, 1], but negative values have no
+        meaningful interpretation for "evidence relevance." Evidence
+        semantically opposed to the claim has zero relevance, not
+        negative relevance.
+
+    Edge cases:
+        - Zero-length vectors → 0.0 (no similarity)
+        - Negative raw similarity → 0.0 (clamped)
+    """
+    a = np.array(vec_a)
+    b = np.array(vec_b)
+
+    norm_a = np.linalg.norm(a)
+    norm_b = np.linalg.norm(b)
+
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+
+    raw_similarity = np.dot(a, b) / (norm_a * norm_b)
+    return float(max(0.0, raw_similarity))  # Clamp to [0.0, 1.0]
+
+
+def _compute_evidence_relevance(
+    trigger_event: str,
+    mechanism: str,
+    evidence_spans: list[str],
+    *,
+    embed_fn: Callable[[str], list[float]],
+) -> float | None:
+    """Score semantic relevance between causal claim and evidence.
+
+    ANM-inspired check: if evidence truly grounds the claim, embeddings
+    should be semantically similar. Low similarity suggests evidence is
+    filler text or the LLM is hallucinating.
+
+    Implementation: Cosine similarity between:
+    - Claim: "{trigger_event} causes {mechanism}"
+    - Evidence: " ".join(evidence_spans)
+
+    Returns:
+        float in [0.0, 1.0] - cosine similarity score
+        None - on edge cases (empty evidence) or embedding failures
+
+    Error handling:
+        Module B is informational only in V3. Embedding failures are
+        caught, logged, and return None. Validation proceeds.
+    """
+    # Edge case: empty or whitespace-only evidence
+    if not evidence_spans or all(not s.strip() for s in evidence_spans):
+        return None  # Cannot score — no evidence to embed
+
+    try:
+        # Construct claim and evidence text
+        claim_text = f"{trigger_event} causes {mechanism}"
+        evidence_text = " ".join(evidence_spans)
+
+        # Call embedding endpoint (2 calls, ~50 tokens each)
+        claim_embedding = embed_fn(claim_text)
+        evidence_embedding = embed_fn(evidence_text)
+
+        # Compute cosine similarity
+        similarity = _cosine_similarity(claim_embedding, evidence_embedding)
+
+        return float(similarity)
+
+    except Exception as e:
+        # Graceful degradation: log and continue without score
+        logger.warning(
+            "Module B embedding failed, continuing without evidence_relevance_score",
+            exc_info=True,
+            extra={
+                "trigger_event": trigger_event[:50],  # truncate for log size
+                "mechanism": mechanism,
+                "error": str(e),
+            },
+        )
+        return None
+
+
 def validate_extraction(
     extraction: ExtractionInput,
     article_body: str,
