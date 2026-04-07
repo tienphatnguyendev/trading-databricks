@@ -194,7 +194,7 @@ https://data.binance.vision/data/spot/monthly/aggTrades/BTCUSDT/BTCUSDT-aggTrade
 | dollar_volume | DOUBLE | Sum of dollar_value |
 | tick_count | LONG | Number of ticks in bar |
 
-**Implementation:** Stateful loop on pandas DataFrame (`.toPandas()` from ticks_cleaned). SDP materialized view (full recompute, per Lopez de Prado).
+**Implementation:** Stateful loop on Polars DataFrame (`pl.from_arrow(spark_df.collect().to_arrow())` from ticks_cleaned). SDP materialized view (full recompute, per Lopez de Prado).
 
 ---
 
@@ -241,7 +241,7 @@ https://data.binance.vision/data/spot/monthly/aggTrades/BTCUSDT/BTCUSDT-aggTrade
 | ewma_vol | DOUBLE | |
 | avg_bars_per_day | DOUBLE | |
 
-**Implementation:** Pure Python function on pandas DataFrame. Stateful loop — not vectorizable.
+**Implementation:** Pure Python function on Polars DataFrame. Stateful loop — not vectorizable. Convert at boundary: `pl.from_arrow()` from Spark, `.to_pandas()` only for scikit-learn `.fit()`.
 
 ### 4.2 Triple-Barrier Labeling
 
