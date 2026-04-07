@@ -5,6 +5,8 @@ Framework agents to query the gold layer.
 """
 from __future__ import annotations
 
+import json
+
 from trading_databricks.agents.config import MASConfig
 from trading_databricks.agents.nodes.few_shot_retriever import (
     STATIC_FEW_SHOT_EXAMPLES,
@@ -74,14 +76,41 @@ def retrieve_few_shot_chains(
     )
 
 
+def fetch_mechanism_whitelist(*, config: MASConfig | None = None) -> str:
+    """Read the mechanism whitelist from gold.mechanism_whitelist as a JSON array.
+
+    This is a UC function tool registered in Mosaic AI Agent Framework.
+    Returns the full whitelist so the LLM can reference valid (treatment, mechanism)
+    pairs and their allowed directions.
+
+    Args:
+        config: MASConfig — catalog/schema determine the table path.
+                Uses default MASConfig() if not provided.
+
+    Returns:
+        JSON array string: [{treatment_l1, mechanism, valid_directions, description}, ...]
+
+    Example:
+        >>> whitelist_json = fetch_mechanism_whitelist()
+        >>> import json; rows = json.loads(whitelist_json)
+        >>> rows[0]["treatment_l1"]
+        'Regulation'
+    """
+    if config is None:
+        config = MASConfig()
+    spark = get_spark_session()
+    rows = spark.table(f"{config.catalog}.{config.schema}.mechanism_whitelist").collect()
+    return json.dumps([row.asDict() for row in rows])
+
+
 def fetch_market_context(published_at: str) -> dict:
     """Fetch market context features for a given publication time.
-    
+
     # TODO: implement post TRD-5
-    
+
     Args:
         published_at: Timestamp string of the article publication
-        
+
     Returns:
         Dict containing market_vol_at_publish, market_trend_at_publish,
         and dollar_bar_close. V1 returns None for all fields.

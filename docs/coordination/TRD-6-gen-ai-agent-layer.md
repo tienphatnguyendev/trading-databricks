@@ -49,8 +49,8 @@
 ---
 
 ## Section 3: RAG + Extractor — TRD-28, TRD-29 (Wave 2)
-- **Status:** in_progress (TRD-28 done, TRD-29 pending)
-- **Branch:** main (TRD-28 merged)
+- **Status:** done (TRD-28 done, TRD-29 done)
+- **Branch:** main (both merged)
 - **Modified files:**
   - `src/trading_databricks/agents/nodes/__init__.py` (NEW)
   - `src/trading_databricks/agents/nodes/few_shot_retriever.py` (NEW)
@@ -96,9 +96,22 @@
 ---
 
 ## Section 5: Integration + Deploy + Eval — TRD-32, TRD-33, TRD-34 (Wave 4–6)
-- **Status:** not_started
-- **Branch:** —
-- **Modified files:** —
-- **Exports (public APIs):** —
-- **Needs from others:** All exports from Sections 1–4
-- **Notes:** Strictly sequential. Cannot start until ALL sections above are done.
+- **Status:** done (TRD-32 complete)
+- **Branch:** feat/TRD-32-w4-wire-langgraph-pipeline (PR open)
+- **Modified files:**
+  - `src/trading_databricks/agents/state.py` (MODIFIED — added body, extraction, validation_status, rejected_mechanism_raw, evidence_relevance_score)
+  - `src/trading_databricks/agents/graph.py` (NEW — route_article, _mechanism_validator_node, build_mas_graph)
+  - `src/trading_databricks/agents/tools.py` (MODIFIED — added fetch_mechanism_whitelist)
+  - `src/trading_databricks/agents/gold.py` (NEW — news_causal_features_transform with gatekeeper UDF + ai_query)
+  - `src/trading_databricks/agents/pipeline.py` (MODIFIED — thin @dp.materialized_view wrapper)
+  - `tests/agents/test_graph.py` (NEW — 9 tests: route_article x4, _mechanism_validator_node x2, compile x1, end-to-end x2)
+  - `tests/agents/test_tools.py` (MODIFIED — 2 tests for fetch_mechanism_whitelist)
+  - `tests/agents/test_gold.py` (NEW — 3 tests for gatekeeper UDF + transform)
+  - `docs/superpowers/specs/2026-04-07-trd32-mas-integration-design.md` (NEW)
+  - `pyproject.toml` (MODIFIED — langgraph>=1.1.6 added)
+- **Exports (public APIs):**
+  - `agents/graph.py`: `build_mas_graph(*, config: MASConfig) -> CompiledStateGraph`, `route_article(state) -> Literal["causality_extractor"]`
+  - `agents/tools.py`: `fetch_mechanism_whitelist(*, config: MASConfig | None) -> str`
+  - `agents/gold.py`: `news_causal_features_transform(spark, *, catalog, gatekeeper_config) -> DataFrame`
+- **Needs from others:** All exports from Sections 1–4 ✅
+- **Notes:** TRD-32 complete. Graph topology: context_retriever → few_shot_retriever → uncertainty_router → [conditional] → causality_extractor → mechanism_validator. Gatekeeper UDF uses is_crypto_relevant() with per-executor-process nlp cache. Gold layer calls ai_query('mas-news-causal', ...) for Model Serving invocation. TRD-33 (MLflow packaging + Model Serving) is next.
