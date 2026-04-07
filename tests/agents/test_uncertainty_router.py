@@ -52,3 +52,9 @@ def test_router_careful_path_low_similarity(config):
     }
     result = uncertainty_router(state, config)
     assert result == {"extraction_path": "careful"}
+
+def test_uncertainty_router_is_exported():
+    import trading_databricks.agents.nodes as nodes
+    assert hasattr(nodes, "uncertainty_router")
+    assert "uncertainty_router" in nodes.__all__
+

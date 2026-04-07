@@ -1,18 +1,20 @@
 """LangGraph node implementations for the MAS agent pipeline."""
 from __future__ import annotations
 
+from trading_databricks.agents.nodes.causality_extractor import causality_extractor
 from trading_databricks.agents.nodes.context_retriever import context_retriever
 from trading_databricks.agents.nodes.few_shot_retriever import (
     STATIC_FEW_SHOT_EXAMPLES,
     few_shot_retriever,
 )
 from trading_databricks.agents.nodes.mechanism_validator import validate_extraction
-from trading_databricks.agents.nodes.causality_extractor import causality_extractor
+from trading_databricks.agents.nodes.uncertainty_router import uncertainty_router
 
 __all__ = [
     "STATIC_FEW_SHOT_EXAMPLES",
     "causality_extractor",
     "context_retriever",
     "few_shot_retriever",
+    "uncertainty_router",
     "validate_extraction",
 ]
