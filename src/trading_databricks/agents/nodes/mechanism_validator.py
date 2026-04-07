@@ -69,6 +69,32 @@ def _parse_l1_category(treatment_class: str) -> str:
     return treatment_class.split(".", maxsplit=1)[0]
 
 
+def _validate_evidence_spans(
+    evidence_spans: list[str],
+    article_body: str,
+) -> bool:
+    """Check that all evidence spans exist in article body (normalized).
+
+    Normalization: casefold() + strip() — prevents false rejections from
+    LLM whitespace/casing variations while catching fabricated evidence.
+
+    Returns False (rejection) when:
+    - evidence_spans is empty []
+    - article_body is empty ""
+    - Any span is empty or whitespace-only after normalization
+    - Any span not found as substring of normalized article body
+    """
+    normed_body = article_body.casefold().strip()
+    normed_spans = [s.casefold().strip() for s in evidence_spans]
+
+    # Degenerate cases: empty evidence, empty body, or whitespace-only spans
+    if not normed_spans or not normed_body or any(not s for s in normed_spans):
+        return False
+
+    # All spans must exist in body
+    return all(span in normed_body for span in normed_spans)
+
+
 def validate_extraction(
     extraction: ExtractionInput,
     article_body: str,

@@ -9,6 +9,7 @@ from trading_databricks.agents.nodes.mechanism_validator import (
     ExtractionInput,
     ValidationResult,
     _parse_l1_category,
+    _validate_evidence_spans,
 )
 
 
@@ -51,3 +52,44 @@ def mock_embed_fn():
 def test_parse_l1_category(treatment_class: str, expected: str):
     """Parse L1 from treatment_class with best-effort handling."""
     assert _parse_l1_category(treatment_class) == expected
+
+
+def test_validate_evidence_spans_degenerate_cases():
+    """Reject empty evidence, empty body, whitespace-only spans."""
+    # Empty spans
+    assert not _validate_evidence_spans([], "article body")
+
+    # Empty body
+    assert not _validate_evidence_spans(["span"], "")
+
+    # Whitespace-only span
+    assert not _validate_evidence_spans(["   "], "article body")
+
+    # Span normalizes to empty
+    assert not _validate_evidence_spans(["  \n  "], "article")
+
+
+def test_validate_evidence_spans_normalized_matching():
+    """Casefold + strip allows case/whitespace variations."""
+    # Case and whitespace variation
+    assert _validate_evidence_spans(["  Bitcoin PRICE  "], "The bitcoin price is rising")
+
+    # Substring match (not word boundaries)
+    assert _validate_evidence_spans(["bitcoin"], "The bitcoin price")
+
+    # Multiple spans, all must match
+    assert _validate_evidence_spans(
+        ["SEC approved", "spot ETF"], "The SEC approved the first spot ETF"
+    )
+
+    # One span doesn't match → reject
+    assert not _validate_evidence_spans(
+        ["SEC approved", "ethereum"], "The SEC approved Bitcoin ETF"
+    )
+
+
+def test_validate_evidence_spans_fabricated_evidence():
+    """Evidence not in article body → reject."""
+    assert not _validate_evidence_spans(
+        ["ethereum price drops"], "The SEC approved the Bitcoin ETF"
+    )
