@@ -6,6 +6,7 @@ Falls back to static examples during cold-start or VS failures.
 from __future__ import annotations
 
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,62 @@ STATIC_FEW_SHOT_EXAMPLES: list[dict] = [
         "causal_chain_json": '{"trigger_event": "BlackRock announces 5% Bitcoin allocation across flagship funds", "mechanism": "institutional_inflow", "asset": "BTC", "expected_direction": "bullish", "confidence": 0.88, "evidence_spans": ["BlackRock announces 5% Bitcoin allocation", "flagship funds"], "reasoning": "Major asset manager allocation signals institutional validation and creates sustained buying pressure from large capital pools."}',
     },
 ]
+
+
+# Module-level cache: {catalog.schema: (count, timestamp)}
+_accepted_count_cache: dict[str, tuple[int, float]] = {}
+
+
+def get_accepted_chain_count(
+    spark,
+    *,
+    catalog: str,
+    schema: str,
+    cache_ttl_seconds: int = 300,
+) -> int:
+    """Query count of accepted causal chains, cached for 5 minutes.
+
+    Args:
+        spark: SparkSession instance
+        catalog: Databricks catalog name
+        schema: Schema name (typically 'gold')
+        cache_ttl_seconds: Cache TTL in seconds (default: 300 = 5min)
+
+    Returns:
+        Count of rows where validation_status='accepted'
+
+    Example:
+        >>> count = get_accepted_chain_count(
+        ...     spark,
+        ...     catalog="trading-signal-gen-dev",
+        ...     schema="gold"
+        ... )
+        >>> print(f"Accepted chains: {count}")
+    """
+    cache_key = f"{catalog}.{schema}"
+    now = time.time()
+
+    # Check cache
+    if cache_key in _accepted_count_cache:
+        count, timestamp = _accepted_count_cache[cache_key]
+        if now - timestamp < cache_ttl_seconds:
+            logger.debug(f"Cache hit for {cache_key}: count={count}")
+            return count
+
+    # Query source table
+    logger.debug(f"Cache miss for {cache_key}, querying DB")
+    query = f"""
+        SELECT COUNT(*)
+        FROM `{catalog}`.`{schema}`.news_causal_features
+        WHERE validation_status = 'accepted'
+    """
+    count = spark.sql(query).collect()[0][0]
+
+    # Update cache
+    _accepted_count_cache[cache_key] = (count, now)
+    logger.info(f"Accepted chain count: {count} (cached for {cache_ttl_seconds}s)")
+
+    return count
 
 
 def few_shot_retriever():
