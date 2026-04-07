@@ -16,3 +16,4 @@ class MASState(TypedDict, total=False):
     market_vol_at_publish: float | None
     market_trend_at_publish: str | None
     dollar_bar_close: float | None
+    extraction_path: str
