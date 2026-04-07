@@ -3,6 +3,7 @@
 Stage 1 is rule-based only: no model download, no MLflow dependency.
 Runs on 100% of articles. Short-circuit: no crypto entity → is_impactful=False.
 """
+
 from __future__ import annotations
 
 import functools
@@ -109,11 +110,11 @@ def extract_ner_features(doc: spacy.tokens.Doc) -> dict[str, bool | int]:
     labels = {ent.label_ for ent in doc.ents}
     return {
         "has_crypto_asset": "CRYPTO_ASSET" in labels,
-        "has_exchange":     "CRYPTO_EXCHANGE" in labels,
-        "has_stablecoin":   "CRYPTO_STABLECOIN" in labels,
-        "has_protocol":     "CRYPTO_PROTOCOL" in labels,
-        "has_concept":      "CRYPTO_CONCEPT" in labels,
-        "entity_count":     len(doc.ents),
+        "has_exchange": "CRYPTO_EXCHANGE" in labels,
+        "has_stablecoin": "CRYPTO_STABLECOIN" in labels,
+        "has_protocol": "CRYPTO_PROTOCOL" in labels,
+        "has_concept": "CRYPTO_CONCEPT" in labels,
+        "entity_count": len(doc.ents),
     }
 
 
