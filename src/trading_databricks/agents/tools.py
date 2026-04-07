@@ -72,3 +72,22 @@ def retrieve_few_shot_chains(
         STATIC_FEW_SHOT_EXAMPLES,
         max_total=5,
     )
+
+
+def fetch_market_context(published_at: str) -> dict:
+    """Fetch market context features for a given publication time.
+    
+    # TODO: implement post TRD-5
+    
+    Args:
+        published_at: Timestamp string of the article publication
+        
+    Returns:
+        Dict containing market_vol_at_publish, market_trend_at_publish,
+        and dollar_bar_close. V1 returns None for all fields.
+    """
+    return {
+        "market_vol_at_publish": None,
+        "market_trend_at_publish": None,
+        "dollar_bar_close": None,
+    }

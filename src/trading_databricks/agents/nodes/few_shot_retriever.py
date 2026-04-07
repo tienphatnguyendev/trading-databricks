@@ -17,15 +17,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Type hints
 # ---------------------------------------------------------------------------
-class MASState(TypedDict, total=False):
-    """Type hint for MAS LangGraph state (partial definition).
-
-    total=False makes all fields optional, as this is only the portion
-    managed by the few-shot retriever node.
-    """
-    headline: str
-    few_shot_examples: list[dict]
-    retrieval_story_ids: list[str]
+from trading_databricks.agents.state import MASState
 
 
 # ---------------------------------------------------------------------------
