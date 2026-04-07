@@ -33,12 +33,18 @@
 ---
 
 ## Section 2: Gatekeeper — TRD-25, TRD-26 (Wave 2–3)
-- **Status:** not_started
-- **Branch:** —
-- **Modified files:** —
-- **Exports (public APIs):** —
-- **Needs from others:** `GatekeeperConfig` from Section 1
-- **Notes:** TRD-25 (Stage 1, spaCy NER) is Wave 2. TRD-26 (Stage 2, sklearn) is Wave 3 — blocked until TRD-25 merges.
+- **Status:** done (TRD-25), not_started (TRD-26)
+- **Branch:** feat/TRD-25-gatekeeper-stage1-spacy-ner (merged)
+- **Modified files:**
+  - `src/trading_databricks/agents/gatekeeper.py` (NEW)
+  - `tests/agents/test_gatekeeper.py` (NEW)
+  - `pyproject.toml` (`spacy==3.8.4` added)
+- **Exports (public APIs):**
+  - `gatekeeper.py`: `CRYPTO_ENTITY_PATTERNS`, `build_nlp`, `extract_ner_features`, `is_crypto_relevant`
+- **Needs from others:** `GatekeeperConfig` from Section 1 ✅
+- **Notes:** Stage 1 NER only (ner_only_mode=True, V1). TRD-26 adds Stage 2 pandas UDF +
+  sklearn LogReg — blocked on TRD-25 merge. UDF callers must call build_nlp() inside
+  the UDF body (spec §5.4); cache is per-executor-process, not serialized.
 
 ---
 
