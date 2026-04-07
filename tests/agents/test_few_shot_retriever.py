@@ -1,9 +1,19 @@
 """Tests for the few-shot retriever node."""
 from __future__ import annotations
 
+import logging
+import time
+from unittest.mock import MagicMock, patch
+
 import pytest
 
-from trading_databricks.agents.nodes.few_shot_retriever import STATIC_FEW_SHOT_EXAMPLES
+from trading_databricks.agents.nodes.few_shot_retriever import (
+    STATIC_FEW_SHOT_EXAMPLES,
+    _accepted_count_cache,
+    get_accepted_chain_count,
+    merge_examples,
+    query_vector_search,
+)
 from trading_databricks.agents.taxonomy import MECHANISM_WHITELIST_SEED
 
 
@@ -52,15 +62,6 @@ class TestStaticExamples:
             l1_category = example["treatment_class"].split(".")[0]
             mechanism = example["mechanism"]
             assert (l1_category, mechanism) in whitelist_pairs
-
-
-import time
-from unittest.mock import MagicMock, patch
-
-from trading_databricks.agents.nodes.few_shot_retriever import (
-    get_accepted_chain_count,
-    _accepted_count_cache,
-)
 
 
 class TestAcceptedChainCount:
@@ -178,3 +179,129 @@ class TestAcceptedChainCount:
         assert mock_spark.sql.call_count == 2
 
         _accepted_count_cache.clear()
+
+
+class TestVectorSearchQuery:
+    """Test VS query logic (mocked MCP)."""
+
+    def test_query_returns_results(self, monkeypatch):
+        """VS query returns expected format with story_ids."""
+        def mock_query_vs_index(*args, **kwargs):
+            return [
+                {
+                    "story_id": "test-123",
+                    "treatment_class": "Macro.rate_decision",
+                    "mechanism": "liquidity_contraction",
+                    "expected_direction": "bearish",
+                    "confidence": 0.85,
+                    "trigger_event": "Fed raises rates",
+                    "causal_chain_json": '{"trigger_event": "Fed raises rates"}',
+                },
+                {
+                    "story_id": "test-456",
+                    "treatment_class": "Regulation.etf_ruling",
+                    "mechanism": "institutional_access",
+                    "expected_direction": "bullish",
+                    "confidence": 0.90,
+                    "trigger_event": "SEC approves ETF",
+                    "causal_chain_json": '{"trigger_event": "SEC approves ETF"}',
+                },
+            ]
+
+        # Mock the MCP tool
+        import sys
+        few_shot_retriever_module = sys.modules["trading_databricks.agents.nodes.few_shot_retriever"]
+        monkeypatch.setattr(few_shot_retriever_module, "query_vs_index", mock_query_vs_index)
+
+        results = query_vector_search(
+            "Bitcoin ETF approved",
+            index_name="test.gold.causal_chains_idx",
+            num_results=5,
+        )
+
+        assert len(results) == 2
+        assert results[0]["story_id"] == "test-123"
+        assert results[1]["story_id"] == "test-456"
+
+    def test_query_handles_empty_results(self, monkeypatch):
+        """Empty VS results return empty list (no error)."""
+        def mock_query_vs_index(*args, **kwargs):
+            return []
+
+        import sys
+        few_shot_retriever_module = sys.modules["trading_databricks.agents.nodes.few_shot_retriever"]
+        monkeypatch.setattr(few_shot_retriever_module, "query_vs_index", mock_query_vs_index)
+
+        results = query_vector_search(
+            "Obscure altcoin news",
+            index_name="test.gold.causal_chains_idx",
+        )
+
+        assert results == []
+
+    def test_query_handles_vs_error(self, monkeypatch, caplog):
+        """VS query failure returns empty list, logs warning."""
+        def mock_query_vs_index(*args, **kwargs):
+            raise RuntimeError("VS endpoint unavailable")
+
+        import sys
+        few_shot_retriever_module = sys.modules["trading_databricks.agents.nodes.few_shot_retriever"]
+        monkeypatch.setattr(few_shot_retriever_module, "query_vs_index", mock_query_vs_index)
+
+        with caplog.at_level(logging.WARNING):
+            results = query_vector_search(
+                "Test headline",
+                index_name="test.gold.causal_chains_idx",
+            )
+
+        assert results == []
+        assert "VS query failed" in caplog.text
+        assert "returning empty results" in caplog.text
+
+
+class TestMergeExamples:
+    """Test dynamic + static merging logic."""
+
+    def test_merge_dynamic_only(self):
+        """5 dynamic + static -> returns first 5 dynamic."""
+        dynamic = [{"story_id": f"dyn-{i}"} for i in range(5)]
+        static = [{"story_id": f"static-{i}"} for i in range(5)]
+
+        result = merge_examples(dynamic, static, max_total=5)
+
+        assert len(result) == 5
+        assert all(ex["story_id"].startswith("dyn-") for ex in result)
+
+    def test_merge_dynamic_plus_static(self):
+        """2 dynamic + static -> returns 2 dynamic + 3 static."""
+        dynamic = [{"story_id": "dyn-0"}, {"story_id": "dyn-1"}]
+        static = [{"story_id": f"static-{i}"} for i in range(5)]
+
+        result = merge_examples(dynamic, static, max_total=5)
+
+        assert len(result) == 5
+        assert result[0]["story_id"] == "dyn-0"
+        assert result[1]["story_id"] == "dyn-1"
+        assert result[2]["story_id"] == "static-0"
+        assert result[3]["story_id"] == "static-1"
+        assert result[4]["story_id"] == "static-2"
+
+    def test_merge_static_fallback(self):
+        """0 dynamic + static -> returns 5 static."""
+        dynamic = []
+        static = [{"story_id": f"static-{i}"} for i in range(5)]
+
+        result = merge_examples(dynamic, static, max_total=5)
+
+        assert len(result) == 5
+        assert all(ex["story_id"].startswith("static-") for ex in result)
+
+    def test_merge_respects_max_total(self):
+        """Result never exceeds max_total."""
+        dynamic = [{"story_id": f"dyn-{i}"} for i in range(10)]
+        static = [{"story_id": f"static-{i}"} for i in range(10)]
+
+        result = merge_examples(dynamic, static, max_total=3)
+
+        assert len(result) == 3
+        assert all(ex["story_id"].startswith("dyn-") for ex in result)
