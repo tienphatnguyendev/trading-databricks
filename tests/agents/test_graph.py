@@ -291,8 +291,9 @@ def test_end_to_end_fast_path(
     llm_resp = _make_llm_response(article)
     embed_resp = {"data": [{"embedding": [0.1] * 384}]}
 
-    def _predict_dispatch(*, endpoint: str, inputs: dict) -> dict:
-        config = MASConfig()
+    config = MASConfig()
+
+    def _predict_dispatch(*, endpoint: str, **_kwargs: dict) -> dict:
         if endpoint == config.llm_endpoint:
             return llm_resp
         return embed_resp
@@ -301,7 +302,7 @@ def test_end_to_end_fast_path(
     unified_client.predict.side_effect = _predict_dispatch
     mock_deploy_client.return_value = unified_client
 
-    graph = build_mas_graph(config=MASConfig())
+    graph = build_mas_graph(config=config)
     state = {
         "headline": article["headline"],
         "body": article["body"],
@@ -357,7 +358,7 @@ def test_end_to_end_10_articles(
         llm_resp = _make_llm_response(article)
 
         def _predict_dispatch(
-            *, endpoint: str, inputs: dict, _llm: dict = llm_resp
+            *, endpoint: str, _llm: dict = llm_resp, **_kwargs: dict
         ) -> dict:
             if endpoint == config.llm_endpoint:
                 return _llm
@@ -365,8 +366,8 @@ def test_end_to_end_10_articles(
 
         unified_client = MagicMock()
         unified_client.predict.side_effect = _predict_dispatch
-        # Reassign before each invoke — LangGraph calls the lambda at invocation time,
-        # so changing return_value here takes effect on the next graph.invoke().
+        # Reassign before each invoke — each graph.invoke() calls get_deploy_client()
+        # fresh at node execution time, so updating return_value here is picked up next.
         mock_deploy_client.return_value = unified_client
 
         state = {
