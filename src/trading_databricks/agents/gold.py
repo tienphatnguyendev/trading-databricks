@@ -7,6 +7,7 @@ Implements the news_causal_features materialized view logic:
 
 This module is imported by agents/pipeline.py — no logic lives there.
 """
+
 from __future__ import annotations
 
 from collections.abc import Callable
@@ -98,22 +99,14 @@ def news_causal_features_transform(
             F.get_json_object(_cr, "$.trigger_event").alias("trigger_event"),
             F.get_json_object(_cr, "$.mechanism").alias("mechanism"),
             F.get_json_object(_cr, "$.asset").alias("asset"),
-            F.get_json_object(_cr, "$.expected_direction").alias(
-                "expected_direction"
-            ),
-            F.get_json_object(_cr, "$.confidence").cast("double").alias(
-                "confidence"
-            ),
-            F.get_json_object(_cr, "$.causal_chain_json").alias(
-                "causal_chain_json"
-            ),
+            F.get_json_object(_cr, "$.expected_direction").alias("expected_direction"),
+            F.get_json_object(_cr, "$.confidence").cast("double").alias("confidence"),
+            F.get_json_object(_cr, "$.causal_chain_json").alias("causal_chain_json"),
             F.from_json(
                 F.get_json_object(_cr, "$.evidence_spans"),
                 "array<string>",
             ).alias("evidence_spans"),
-            F.get_json_object(_cr, "$.validation_status").alias(
-                "validation_status"
-            ),
+            F.get_json_object(_cr, "$.validation_status").alias("validation_status"),
             F.get_json_object(_cr, "$.rejected_mechanism_raw").alias(
                 "rejected_mechanism_raw"
             ),

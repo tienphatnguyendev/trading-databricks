@@ -1,4 +1,5 @@
 """Tests for agents/gold.py — news_causal_features_transform."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock
@@ -17,7 +18,7 @@ def test_gatekeeper_udf_passes_crypto_article() -> None:
         pd.Series(["Bitcoin ETF approved by SEC"]),
         pd.Series(["The SEC has approved the first spot Bitcoin ETF."]),
     )
-    assert result.iloc[0] is True
+    assert result.iloc[0]
 
 
 def test_gatekeeper_udf_rejects_non_crypto_article() -> None:
@@ -31,7 +32,7 @@ def test_gatekeeper_udf_rejects_non_crypto_article() -> None:
         pd.Series(["Fed raises interest rates"]),
         pd.Series(["The Federal Reserve raised rates by 25bp in a unanimous vote."]),
     )
-    assert result.iloc[0] is False
+    assert not result.iloc[0]
 
 
 def test_news_causal_features_transform_calls_spark_and_filters() -> None:
