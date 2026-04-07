@@ -1,8 +1,11 @@
 """Tests for agents/graph.py — LangGraph StateGraph assembly."""
 from __future__ import annotations
 
+import json
 import pytest
+from unittest.mock import MagicMock, patch
 
+from trading_databricks.agents.config import MASConfig
 from trading_databricks.agents.state import MASState
 
 
@@ -34,11 +37,6 @@ def test_route_article_no_path():
 
     state: MASState = {"headline": "test"}
     assert route_article(state) == "causality_extractor"
-
-
-from unittest.mock import MagicMock, patch
-
-from trading_databricks.agents.config import MASConfig
 
 
 def test_mechanism_validator_node_no_extraction():

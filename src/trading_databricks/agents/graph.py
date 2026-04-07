@@ -93,9 +93,9 @@ def build_mas_graph(*, config: MASConfig):
     graph = StateGraph(MASState)
 
     graph.add_node("context_retriever",   lambda s: context_retriever(s, config=config))
-    graph.add_node("few_shot_retriever",  lambda s: few_shot_retriever(s, config))
-    graph.add_node("uncertainty_router",  lambda s: uncertainty_router(s, config))
-    graph.add_node("causality_extractor", lambda s: causality_extractor(s, config))
+    graph.add_node("few_shot_retriever",  lambda s: few_shot_retriever(s, config=config))
+    graph.add_node("uncertainty_router",  lambda s: uncertainty_router(s, config=config))
+    graph.add_node("causality_extractor", lambda s: causality_extractor(s, config=config))
     graph.add_node("mechanism_validator", lambda s: _mechanism_validator_node(s, config))
 
     graph.set_entry_point("context_retriever")
