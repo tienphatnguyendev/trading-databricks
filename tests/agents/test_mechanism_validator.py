@@ -12,6 +12,7 @@ from trading_databricks.agents.nodes.mechanism_validator import (
     _cosine_similarity,
     _parse_l1_category,
     _validate_evidence_spans,
+    validate_extraction,
 )
 
 
@@ -195,3 +196,123 @@ def test_compute_evidence_relevance_embed_failure():
     )
 
     assert result is None  # Graceful degradation
+
+
+# ===== validate_extraction integration tests =====
+
+
+def test_validate_extraction_accepted(mock_whitelist, mock_embed_fn):
+    """Valid extraction passes all checks."""
+    extraction: ExtractionInput = {
+        "treatment_class": "Regulation.etf_ruling",
+        "trigger_event": "SEC approves ETF",
+        "mechanism": "regulatory_clarity",
+        "expected_direction": "bullish",
+        "evidence_spans": ["The SEC approved the first spot ETF"],
+    }
+
+    result = validate_extraction(
+        extraction,
+        article_body="The SEC approved the first spot ETF for Bitcoin",
+        whitelist=mock_whitelist,
+        config=MechanismValidatorConfig(),
+        embed_fn=mock_embed_fn,
+    )
+
+    assert result["validation_status"] == "accepted"
+    assert result["rejected_mechanism_raw"] is None
+    assert result["evidence_relevance_score"] is not None
+    assert 0.0 <= result["evidence_relevance_score"] <= 1.0
+
+
+def test_validate_extraction_rejected_mechanism(mock_whitelist, mock_embed_fn):
+    """Unknown mechanism → rejected_mechanism, Module B still runs."""
+    extraction: ExtractionInput = {
+        "treatment_class": "Regulation.etf_ruling",
+        "trigger_event": "SEC approves",
+        "mechanism": "unknown_mechanism",  # Not in whitelist
+        "expected_direction": "bullish",
+        "evidence_spans": ["The SEC approved the first spot ETF"],
+    }
+
+    result = validate_extraction(
+        extraction,
+        article_body="The SEC approved the first spot ETF for Bitcoin",
+        whitelist=mock_whitelist,
+        config=MechanismValidatorConfig(),
+        embed_fn=mock_embed_fn,
+    )
+
+    assert result["validation_status"] == "rejected_mechanism"
+    assert result["rejected_mechanism_raw"] == "unknown_mechanism"
+    assert result["evidence_relevance_score"] is not None  # Module B still ran!
+    assert 0.0 <= result["evidence_relevance_score"] <= 1.0
+
+
+def test_validate_extraction_rejected_direction(mock_whitelist, mock_embed_fn):
+    """Invalid direction → rejected_direction, Module B runs."""
+    extraction: ExtractionInput = {
+        "treatment_class": "Regulation.etf_ruling",
+        "trigger_event": "SEC approves",
+        "mechanism": "regulatory_clarity",
+        "expected_direction": "bearish",  # Not in valid_directions
+        "evidence_spans": ["The SEC approved"],
+    }
+
+    result = validate_extraction(
+        extraction,
+        article_body="The SEC approved the ETF",
+        whitelist=mock_whitelist,
+        config=MechanismValidatorConfig(),
+        embed_fn=mock_embed_fn,
+    )
+
+    assert result["validation_status"] == "rejected_direction"
+    assert result["rejected_mechanism_raw"] is None
+    assert result["evidence_relevance_score"] is not None  # Module B runs
+
+
+def test_validate_extraction_rejected_evidence(mock_whitelist, mock_embed_fn):
+    """Evidence not in article body → rejected_evidence, Module B tries."""
+    extraction: ExtractionInput = {
+        "treatment_class": "Regulation.etf_ruling",
+        "trigger_event": "SEC approves",
+        "mechanism": "regulatory_clarity",
+        "expected_direction": "bullish",
+        "evidence_spans": ["ethereum price drops"],  # Not in article
+    }
+
+    result = validate_extraction(
+        extraction,
+        article_body="The SEC approved the Bitcoin ETF",
+        whitelist=mock_whitelist,
+        config=MechanismValidatorConfig(),
+        embed_fn=mock_embed_fn,
+    )
+
+    assert result["validation_status"] == "rejected_evidence"
+    assert result["rejected_mechanism_raw"] is None
+    # Module B tries to score, likely succeeds (spans exist as strings)
+    # or returns None if embed_fn rejects the text
+
+
+def test_validate_extraction_malformed_treatment_class(mock_whitelist, mock_embed_fn):
+    """Malformed treatment_class → fails at whitelist lookup."""
+    extraction: ExtractionInput = {
+        "treatment_class": ".malformed",  # Parses to empty L1
+        "trigger_event": "event",
+        "mechanism": "regulatory_clarity",
+        "expected_direction": "bullish",
+        "evidence_spans": ["evidence"],
+    }
+
+    result = validate_extraction(
+        extraction,
+        article_body="evidence text",
+        whitelist=mock_whitelist,
+        config=MechanismValidatorConfig(),
+        embed_fn=mock_embed_fn,
+    )
+
+    assert result["validation_status"] == "rejected_mechanism"
+    assert result["rejected_mechanism_raw"] == "regulatory_clarity"

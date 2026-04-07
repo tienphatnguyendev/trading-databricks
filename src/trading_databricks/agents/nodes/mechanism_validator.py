@@ -191,21 +191,53 @@ def validate_extraction(
     config: MechanismValidatorConfig,
     embed_fn: Callable[[str], list[float]],
 ) -> ValidationResult:
-    """Validate an LLM extraction through 5-step validation pipeline.
-
-    Stub implementation. Full implementation follows in Tasks 2-6.
+    """Run 5-step validation. Steps 1-4 deterministic. Step 5 (Module B) informational.
 
     Args:
-        extraction: LLM extraction output
-        article_body: Full article text for evidence matching
-        whitelist: Taxonomy whitelist from load_whitelist()
-        config: MechanismValidatorConfig settings
-        embed_fn: Embedding function (str) -> list[float]
+        extraction: LLM output with treatment_class, mechanism, direction, evidence
+        article_body: Full article text for evidence substring matching
+        whitelist: {(treatment_l1, mechanism): [valid_directions]} from load_whitelist()
+        config: MechanismValidatorConfig (contains evidence_grounding_reject_threshold, unused in V3)
+        embed_fn: Embedding function, signature (str) -> list[float], injected by caller
 
     Returns:
-        Validation result with status and optional rejection reasons
+        ValidationResult with 3 fields:
+            - validation_status: "accepted" | "rejected_mechanism" | "rejected_direction" | "rejected_evidence"
+            - rejected_mechanism_raw: str | None (only for rejected_mechanism)
+            - evidence_relevance_score: float [0, 1] | None (None on embed failure or empty evidence)
 
-    Raises:
-        NotImplementedError: Tasks 2-6 pending implementation
+    Error handling:
+        Module B embedding failures are caught and logged. The function always
+        returns a ValidationResult — no uncaught exceptions propagate to caller.
     """
-    raise NotImplementedError("validate_extraction: Tasks 2-6 pending")
+    # Step 1: Parse L1 from treatment_class
+    l1 = _parse_l1_category(extraction["treatment_class"])
+    mechanism = extraction["mechanism"]
+
+    # Steps 2-4: Determine validation status (NO early returns)
+    if (l1, mechanism) not in whitelist:
+        status = "rejected_mechanism"
+        rejected_raw = mechanism
+    elif extraction["expected_direction"] not in whitelist[(l1, mechanism)]:
+        status = "rejected_direction"
+        rejected_raw = None
+    elif not _validate_evidence_spans(extraction["evidence_spans"], article_body):
+        status = "rejected_evidence"
+        rejected_raw = None
+    else:
+        status = "accepted"
+        rejected_raw = None
+
+    # Step 5: ALWAYS runs (Module B — informational, even for rejected chains)
+    score = _compute_evidence_relevance(
+        extraction["trigger_event"],
+        mechanism,
+        extraction["evidence_spans"],
+        embed_fn=embed_fn,
+    )
+
+    return {
+        "validation_status": status,
+        "rejected_mechanism_raw": rejected_raw,
+        "evidence_relevance_score": score,
+    }
