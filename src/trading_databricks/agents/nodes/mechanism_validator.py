@@ -50,15 +50,29 @@ class ValidationResult(TypedDict):
     evidence_relevance_score: float | None  # [0.0, 1.0] cosine similarity, None on embed failure or empty evidence
 
 
-def validate_extraction(extraction: ExtractionInput) -> ValidationResult:
+def validate_extraction(
+    extraction: ExtractionInput,
+    article_body: str,
+    whitelist: dict[tuple[str, str], list[str]],
+    *,
+    config: MechanismValidatorConfig,
+    embed_fn: Callable[[str], list[float]],
+) -> ValidationResult:
     """Validate an LLM extraction through 5-step validation pipeline.
 
-    This is a stub implementation. Full implementation is in TRD-30.
+    Stub implementation. Full implementation follows in Tasks 2-6.
 
     Args:
         extraction: LLM extraction output
+        article_body: Full article text for evidence matching
+        whitelist: Taxonomy whitelist from load_whitelist()
+        config: MechanismValidatorConfig settings
+        embed_fn: Embedding function (str) -> list[float]
 
     Returns:
         Validation result with status and optional rejection reasons
+
+    Raises:
+        NotImplementedError: Tasks 2-6 pending implementation
     """
-    raise NotImplementedError("validate_extraction is not yet implemented (TRD-30)")
+    raise NotImplementedError("validate_extraction: Tasks 2-6 pending")

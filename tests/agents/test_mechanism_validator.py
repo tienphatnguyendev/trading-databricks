@@ -30,7 +30,7 @@ def mock_embed_fn():
 
     def _embed(text: str) -> list[float]:
         # Simple hash-based mock: same text → same vector
-        np.random.seed(hash(text) % (2**32))
+        np.random.seed(abs(hash(text)) % (2**32))
         return np.random.randn(384).tolist()  # GTE-large dimension
 
     return _embed
