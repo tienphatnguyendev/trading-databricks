@@ -72,7 +72,7 @@
 
 ## Section 4: Validator + Router + Context — TRD-27, TRD-30, TRD-31 (Wave 2–3)
 - **Status:** in_progress (TRD-27 and TRD-30 done, TRD-31 not started)
-- **Branch:** feat/TRD-30-mechanism-validator, aaronngdev/trd-27-w2-implement-context_retriever-node-returns-null-market (PR #17)
+- **Branch:** feat/TRD-30-mechanism-validator, aaronngdev/trd-27-w2-implement-context_retriever-node-returns-null-market (merged PR #17)
 - **Modified files:**
   - `src/trading_databricks/agents/nodes/__init__.py` (MODIFIED)
   - `src/trading_databricks/agents/nodes/mechanism_validator.py` (NEW)
