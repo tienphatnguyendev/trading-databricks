@@ -100,7 +100,7 @@ def test_build_mas_graph_compiles(mock_count, mock_spark):
     assert isinstance(graph, CompiledStateGraph)
 
 
-SAMPLE_ARTICLES = [
+SAMPLE_ARTICLES: list[dict[str, str]] = [
     {
         "headline": "SEC approves first spot Bitcoin ETF applications",
         "body": (
@@ -213,7 +213,7 @@ SAMPLE_ARTICLES = [
     },
 ]
 
-_VALID_WHITELIST = {
+_VALID_WHITELIST: dict[tuple[str, str], list[str]] = {
     ("Regulation", "institutional_access"): ["bullish"],
     ("Regulation", "regulatory_clarity"): ["bullish"],
     ("Regulation", "regulatory_restriction"): ["bearish"],
@@ -251,27 +251,23 @@ def _make_llm_response(article: dict) -> dict:
     }
 
 
-@patch("trading_databricks.agents.graph.mlflow.deployments.get_deploy_client")
 @patch("trading_databricks.agents.graph.load_whitelist")
 @patch("trading_databricks.agents.graph.get_spark_session")
-@patch(
-    "trading_databricks.agents.nodes.causality_extractor.mlflow.deployments.get_deploy_client"
-)
 @patch("trading_databricks.agents.nodes.causality_extractor.get_spark_session")
 @patch("trading_databricks.agents.nodes.causality_extractor.load_taxonomy")
 @patch("trading_databricks.agents.nodes.causality_extractor.load_whitelist")
 @patch("trading_databricks.agents.nodes.few_shot_retriever.get_accepted_chain_count")
 @patch("trading_databricks.agents.nodes.few_shot_retriever.get_spark_session")
+@patch("mlflow.deployments.get_deploy_client")
 def test_end_to_end_fast_path(
+    mock_deploy_client: MagicMock,
     mock_fsr_spark: MagicMock,
     mock_fsr_count: MagicMock,
     mock_ext_whitelist: MagicMock,
     mock_ext_taxonomy: MagicMock,
     mock_ext_spark: MagicMock,
-    mock_ext_client: MagicMock,
     mock_val_spark: MagicMock,
     mock_val_whitelist: MagicMock,
-    mock_val_client: MagicMock,
 ) -> None:
     """Full graph: single article through the complete 5-node pipeline."""
     from trading_databricks.agents.graph import build_mas_graph
@@ -284,15 +280,26 @@ def test_end_to_end_fast_path(
     # causality_extractor mocks
     mock_ext_taxonomy.return_value = {"Regulation": ["etf_ruling", "subcategory"]}
     mock_ext_whitelist.return_value = _VALID_WHITELIST
-    mock_llm_client = MagicMock()
-    mock_llm_client.predict.return_value = _make_llm_response(article)
-    mock_ext_client.return_value = mock_llm_client
 
-    # mechanism_validator mocks (embed_fn via graph.py's mlflow client)
+    # mechanism_validator mocks
     mock_val_whitelist.return_value = _VALID_WHITELIST
-    mock_embed_client = MagicMock()
-    mock_embed_client.predict.return_value = {"data": [{"embedding": [0.1] * 384}]}
-    mock_val_client.return_value = mock_embed_client
+
+    # Single unified client: dispatch on endpoint to avoid double-patch collision.
+    # Both causality_extractor and graph.py call mlflow.deployments.get_deploy_client,
+    # which resolves to the same underlying function. Patching it once here ensures
+    # both callers see the same mock; the side_effect distinguishes LLM vs embed calls.
+    llm_resp = _make_llm_response(article)
+    embed_resp = {"data": [{"embedding": [0.1] * 384}]}
+
+    def _predict_dispatch(*, endpoint: str, inputs: dict) -> dict:
+        config = MASConfig()
+        if endpoint == config.llm_endpoint:
+            return llm_resp
+        return embed_resp
+
+    unified_client = MagicMock()
+    unified_client.predict.side_effect = _predict_dispatch
+    mock_deploy_client.return_value = unified_client
 
     graph = build_mas_graph(config=MASConfig())
     state = {
@@ -303,37 +310,28 @@ def test_end_to_end_fast_path(
     result = graph.invoke(state)
 
     assert "validation_status" in result
-    assert result["validation_status"] in (
-        "accepted",
-        "rejected_mechanism",
-        "rejected_direction",
-        "rejected_evidence",
-    )
+    assert result["validation_status"] == "accepted"
     assert "extraction_path" in result
     assert result["extraction_path"] in ("fast", "standard", "careful")
 
 
-@patch("trading_databricks.agents.graph.mlflow.deployments.get_deploy_client")
 @patch("trading_databricks.agents.graph.load_whitelist")
 @patch("trading_databricks.agents.graph.get_spark_session")
-@patch(
-    "trading_databricks.agents.nodes.causality_extractor.mlflow.deployments.get_deploy_client"
-)
 @patch("trading_databricks.agents.nodes.causality_extractor.get_spark_session")
 @patch("trading_databricks.agents.nodes.causality_extractor.load_taxonomy")
 @patch("trading_databricks.agents.nodes.causality_extractor.load_whitelist")
 @patch("trading_databricks.agents.nodes.few_shot_retriever.get_accepted_chain_count")
 @patch("trading_databricks.agents.nodes.few_shot_retriever.get_spark_session")
+@patch("mlflow.deployments.get_deploy_client")
 def test_end_to_end_10_articles(
+    mock_deploy_client: MagicMock,
     mock_fsr_spark: MagicMock,
     mock_fsr_count: MagicMock,
     mock_ext_whitelist: MagicMock,
     mock_ext_taxonomy: MagicMock,
     mock_ext_spark: MagicMock,
-    mock_ext_client: MagicMock,
     mock_val_spark: MagicMock,
     mock_val_whitelist: MagicMock,
-    mock_val_client: MagicMock,
 ) -> None:
     """Full graph: all 10 articles produce a final state with validation_status."""
     from trading_databricks.agents.graph import build_mas_graph
@@ -350,16 +348,26 @@ def test_end_to_end_10_articles(
     mock_ext_whitelist.return_value = _VALID_WHITELIST
     mock_val_whitelist.return_value = _VALID_WHITELIST
 
-    mock_embed_client = MagicMock()
-    mock_embed_client.predict.return_value = {"data": [{"embedding": [0.1] * 384}]}
-    mock_val_client.return_value = mock_embed_client
+    embed_resp = {"data": [{"embedding": [0.1] * 384}]}
+    config = MASConfig()
 
-    graph = build_mas_graph(config=MASConfig())
+    graph = build_mas_graph(config=config)
 
     for article in SAMPLE_ARTICLES:
-        mock_llm_client = MagicMock()
-        mock_llm_client.predict.return_value = _make_llm_response(article)
-        mock_ext_client.return_value = mock_llm_client
+        llm_resp = _make_llm_response(article)
+
+        def _predict_dispatch(
+            *, endpoint: str, inputs: dict, _llm: dict = llm_resp
+        ) -> dict:
+            if endpoint == config.llm_endpoint:
+                return _llm
+            return embed_resp
+
+        unified_client = MagicMock()
+        unified_client.predict.side_effect = _predict_dispatch
+        # Reassign before each invoke — LangGraph calls the lambda at invocation time,
+        # so changing return_value here takes effect on the next graph.invoke().
+        mock_deploy_client.return_value = unified_client
 
         state = {
             "headline": article["headline"],
@@ -378,3 +386,6 @@ def test_end_to_end_10_articles(
             "rejected_evidence",
         ), f"Invalid status '{result['validation_status']}' for: {article['headline']}"
         assert "extraction" in result, f"Missing extraction for: {article['headline']}"
+        assert "extraction_path" in result, (
+            f"Missing extraction_path for: {article['headline']}"
+        )
