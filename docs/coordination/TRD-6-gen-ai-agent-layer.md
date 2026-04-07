@@ -71,12 +71,18 @@
 ---
 
 ## Section 4: Validator + Router + Context — TRD-27, TRD-30, TRD-31 (Wave 2–3)
-- **Status:** not_started
-- **Branch:** —
-- **Modified files:** —
-- **Exports (public APIs):** —
-- **Needs from others:** `MechanismValidatorConfig`, `MECHANISM_WHITELIST_SCHEMA`, `load_whitelist()` from Section 1; TRD-31 also needs `FewShotRetriever` from Section 3
-- **Notes:** TRD-27 is a stub (no-op until TRD-5). TRD-31 is Wave 3, blocked until TRD-28 merges.
+- **Status:** in_progress (TRD-30 done, TRD-27/TRD-31 not started)
+- **Branch:** feat/TRD-30-mechanism-validator
+- **Modified files:**
+  - `src/trading_databricks/agents/nodes/__init__.py` (MODIFIED - added validate_extraction export)
+  - `src/trading_databricks/agents/nodes/mechanism_validator.py` (NEW)
+  - `tests/agents/test_mechanism_validator.py` (NEW)
+- **Exports (public APIs):**
+  - `nodes.validate_extraction(extraction, article_body, whitelist, config, embed_fn) -> ValidationResult`
+  - `nodes.mechanism_validator.ExtractionInput` (TypedDict)
+  - `nodes.mechanism_validator.ValidationResult` (TypedDict)
+- **Needs from others:** `MechanismValidatorConfig`, `MECHANISM_WHITELIST_SCHEMA`, `load_whitelist()` from Section 1
+- **Notes:** TRD-30 complete. TRD-27 (uncertainty router) is a no-op stub until TRD-5. TRD-31 (context retriever) is Wave 3, blocked until TRD-28 merges. Ready for LangGraph integration in TRD-32.
 
 ---
 
