@@ -198,3 +198,27 @@ def test_feature_union() -> None:
     assert "event_ts" in result.columns
     # No duplicate columns
     assert len(result.columns) == len(set(result.columns))
+
+
+def test_numpy_bridge() -> None:
+    from trading_databricks.ml.transformers.numpy_bridge import PolarsToNumpy
+
+    events = pl.DataFrame({
+        "event_id": ["e1"],
+        "symbol": ["BTC"],
+        "event_ts": [datetime(2026, 1, 1)],
+        "bar_index": [1],
+        "tech_feat": [1.0],
+        "vol_feat": [2.0],
+    })
+
+    bridge = PolarsToNumpy()
+    bridge.fit(events)
+
+    assert bridge.output_features_ == ["tech_feat", "vol_feat"]
+
+    result = bridge.transform(events)
+    assert isinstance(result, np.ndarray)
+    assert result.shape == (1, 2)
+    assert result[0, 0] == 1.0
+    assert result[0, 1] == 2.0
