@@ -12,8 +12,8 @@
 ---
 
 ## Section 1: Schema & Config — TRD-39 (Wave 1)
-- **Status:** not_started
-- **Branch:** —
+- **Status:** done
+- **Branch:** feat/TRD-39-ml-schema-config-dataclasses
 - **Modified files:**
   - `src/trading_databricks/ml/__init__.py` (NEW)
   - `src/trading_databricks/ml/config.py` (NEW)
