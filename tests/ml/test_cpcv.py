@@ -93,28 +93,25 @@ def test_backtest_paths_cover_all_groups() -> None:
 
 def test_embargo_applies_after_each_test_segment() -> None:
     """Non-contiguous test groups must have embargo after EACH segment."""
-    from trading_databricks.ml.config import CPCVConfig
-    from trading_databricks.ml.training.cpcv import CPCVSplitter
-    import numpy as np
-
     n = 120
     t_start = np.arange(n)
     t_end = np.arange(n) + 5
     config = CPCVConfig(n_groups=6, k_test=2, embargo_pct=0.01)
     splitter = CPCVSplitter(config, t_start=t_start, t_end=t_end)
-    
-    found = False
+
     for train_idx, test_idx in splitter.split(np.zeros((n, 1))):
         sorted_test = np.sort(test_idx)
         gaps = np.where(np.diff(sorted_test) > 1)[0]
         if len(gaps) > 0:
-            found = True
             first_seg_end = sorted_test[gaps[0]]
             embargo_size = max(1, int(0.01 * n))
-            for embargo_idx in range(first_seg_end + 1, first_seg_end + 1 + embargo_size):
+            for embargo_idx in range(
+                first_seg_end + 1, first_seg_end + 1 + embargo_size
+            ):
                 assert embargo_idx not in train_idx, (
-                    f"Sample {embargo_idx} should be embargoed (after first test segment ending at {first_seg_end})"
+                    f"Sample {embargo_idx} should be embargoed "
+                    f"(after first test segment ending at {first_seg_end})"
                 )
             return
-            
-    assert found, "No non-contiguous test groups found in any split"
+
+    pytest.fail("No non-contiguous test groups found in any split")

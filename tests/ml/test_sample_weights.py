@@ -36,20 +36,14 @@ def test_raises_when_avg_uniqueness_column_missing() -> None:
     with pytest.raises(pl.exceptions.ColumnNotFoundError):
         compute_sample_weights(labels)
 
-def test_nan_weights_raise_value_error() -> None:
-    import pytest
-    import polars as pl
-    from trading_databricks.ml.training.sample_weights import compute_sample_weights
 
+def test_nan_weights_raise_value_error() -> None:
     labels = pl.DataFrame({"avg_uniqueness": [0.8, float("nan"), 0.6]})
     with pytest.raises(ValueError, match="NaN"):
         compute_sample_weights(labels)
 
-def test_zero_weights_raise_value_error() -> None:
-    import pytest
-    import polars as pl
-    from trading_databricks.ml.training.sample_weights import compute_sample_weights
 
+def test_zero_weights_raise_value_error() -> None:
     labels = pl.DataFrame({"avg_uniqueness": [0.8, 0.0, 0.6]})
     with pytest.raises(ValueError, match="non-positive"):
         compute_sample_weights(labels)
