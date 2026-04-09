@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import uuid
 from datetime import UTC, datetime
 
@@ -112,7 +113,6 @@ def detect_cusum_events(
 
     # --- Step 3: avg_bars_per_day + rolling threshold ---
     # Compute avg bars per day: bars_seen / days_elapsed
-    min_ts = bars["bar_end_time"].min()
     lookback_size = int(75 * config.lookback_days)
     # initial estimate: 2250 bars for 30 days
 
@@ -160,7 +160,7 @@ def detect_cusum_events(
             continue  # zero-vol guard: skip bar, don't update accumulators
 
         threshold = row["threshold"]
-        if threshold is None or (isinstance(threshold, float) and threshold != threshold):
+        if threshold is None or (isinstance(threshold, float) and math.isnan(threshold)):
             continue
 
         s_pos = max(0.0, s_pos + lr)

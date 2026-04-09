@@ -224,17 +224,21 @@ def test_sigma_probability_guard_for_zero_vol() -> None:
 
 def test_close_zero_does_not_corrupt_pipeline() -> None:
     """A single close=0 bar must not produce NaN in any output column."""
-    closes = [100.0] * 200
-    bars = _make_bars(closes, hours_per_bar=4.5)
-    # Inject a zero close
+    import numpy as np
+
+    # Trending market: 500 bars × 1.5h = 31.25 days (passes the 30-day warm-up guard)
+    closes = list(100.0 * np.cumprod(1 + np.full(500, 0.001)))
+    bars = _make_bars(closes, hours_per_bar=1.5)
+    # Inject a zero close mid-way
     bars = bars.with_columns(
-        pl.when(pl.col("bar_index") == 50)
+        pl.when(pl.col("bar_index") == 100)
         .then(pl.lit(0.0))
         .otherwise(pl.col("close"))
         .alias("close")
     )
     result = detect_cusum_events(bars)
-    # Should either skip the bad bar or return empty, not produce NaN in the output
+    # Pipeline must produce events and none should contain NaN
+    assert not result.is_empty(), "Expected events from trending market with injected zero close"
     assert result.select(pl.col(pl.Float64).is_nan().any()).sum_horizontal().item() == 0
 
 
