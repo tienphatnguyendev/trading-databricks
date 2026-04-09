@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 import polars as pl
 
@@ -104,3 +104,26 @@ def test_empty_events_returns_empty_lazyframe() -> None:
     result = compute_technical(events, bars).collect()
     assert result.is_empty()
     assert "rsi_14" in result.columns
+
+def test_technical_log_zero_handling():
+    """Verify that log(0) does not produce NaN/inf for log returns."""
+    # Create bars where close drops to 0
+    bars = pl.DataFrame({
+        "bar_index": list(range(25)),
+        "open": [10.0] * 25,
+        "high": [10.0] * 25,
+        "low": [10.0] * 25,
+        "close": [10.0] * 24 + [0.0],  # Last bar is 0
+    }).lazy()
+
+    events = pl.DataFrame({
+        "event_id": ["e1"],
+        "symbol": ["BTC"],
+        "event_ts": [datetime(2024, 1, 1, tzinfo=UTC)],
+        "bar_index": [24],
+    }).lazy()
+
+    result = compute_technical(events, bars).collect()
+    
+    # log_return_5 should be null, not NaN or -inf
+    assert result["log_return_5"][0] is None

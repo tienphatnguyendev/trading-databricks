@@ -41,7 +41,7 @@ def compute_technical(
         # Price deltas for RSI (standard RSI uses price changes, not log returns)
         pl.col("close").diff().alias("_delta"),
         # Log returns (used for log_return_5, log_return_20 below)
-        pl.col("close").log().diff().alias("_log_ret"),
+        pl.when(pl.col("close") > 0).then(pl.col("close").log()).otherwise(None).diff().alias("_log_ret"),
     ).with_columns(
         # RSI-14 (on price deltas per AFML/standard definition)
         (
@@ -76,8 +76,8 @@ def compute_technical(
             / (pl.col("close").rolling_mean(50) + 1e-12)
         ).alias("sma_ratio_10_50"),
         # Log returns over N bars
-        pl.col("close").log().diff(5).alias("log_return_5"),
-        pl.col("close").log().diff(20).alias("log_return_20"),
+        pl.when(pl.col("close") > 0).then(pl.col("close").log()).otherwise(None).diff(5).alias("log_return_5"),
+        pl.when(pl.col("close") > 0).then(pl.col("close").log()).otherwise(None).diff(20).alias("log_return_20"),
     ).with_columns(
         pl.lit(now).alias("computed_at"),
     )
