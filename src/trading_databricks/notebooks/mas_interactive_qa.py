@@ -151,3 +151,44 @@ try:
         plt.show()
 except Exception as e:
     print(f"Skipping RAG execution (requires active VS/Spark): {e}")
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## Section 4: LLM Causality Extractor (Autopsy)
+# MAGIC Inspect exact prompts and raw LLM responses for the careful path.
+
+# COMMAND ----------
+from trading_databricks.agents.nodes.causality_extractor import (  # noqa: E402
+    causality_extractor,
+)
+from trading_databricks.agents.prompts import build_system_prompt  # noqa: E402
+from trading_databricks.agents.taxonomy import load_taxonomy, load_whitelist  # noqa: E402
+
+try:
+    # Sandbox: Manually set a state to 'careful' path to observe majority voting
+    sandbox_state = states[0].copy()
+    sandbox_state["extraction_path"] = "careful"
+    sandbox_state["few_shot_examples"] = [] # Empty for cold-start test
+
+    print(f"Testing extraction for headline: {sandbox_state['headline']}")
+
+    # Show what the LLM sees
+    taxonomy = load_taxonomy(
+        spark, catalog=MASConfig().catalog, schema=MASConfig().schema
+    )
+    whitelist = load_whitelist(
+        spark, catalog=MASConfig().catalog, schema=MASConfig().schema
+    )
+    system_prompt = build_system_prompt(taxonomy, whitelist, [], "careful")
+    print(
+        f"\n--- SYSTEM PROMPT (Truncated) ---\n{system_prompt[:500]}...\n"
+        "---------------------------------"
+    )
+
+    # Run the extractor (calls databricks-claude-sonnet)
+    extracted_state = causality_extractor(sandbox_state, config=MASConfig())
+    print("\nFinal Majority Vote Extraction:")
+    print(pd.Series(extracted_state.get("extraction", {})))
+
+except Exception as e:
+    print(f"Skipping Extractor execution (requires active MLflow deployments): {e}")

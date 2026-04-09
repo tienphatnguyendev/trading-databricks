@@ -30,3 +30,9 @@ def test_notebook_has_routing_section():
     assert "Section 3: RAG & Routing Inspection" in content
     assert "few_shot_retriever" in content
     assert "uncertainty_router" in content
+
+def test_notebook_has_extractor_section():
+    content = Path("src/trading_databricks/notebooks/mas_interactive_qa.py").read_text()
+    assert "Section 4: LLM Causality Extractor (Autopsy)" in content
+    assert "causality_extractor" in content
+    assert "build_system_prompt" in content
