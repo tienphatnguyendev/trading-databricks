@@ -72,11 +72,13 @@ def test_long_position_for_primary_side_1() -> None:
 
 
 def test_long_only_constraint_short_signal_becomes_flat() -> None:
-    """Phase 1A: primary_side=-1 → position side='flat' (no short selling)."""
+    """Phase 1A: primary_side=-1 → position side='flat', weight=0.0, confidence=0.0."""
     signals = _make_signals([0.85], [-1], [0.85])
     result = compute_positions(signals)
 
     assert result["side"][0] == "flat"
+    assert result["weight"][0] == 0.0
+    assert result["confidence"][0] == 0.0
 
 
 def test_latest_signal_wins() -> None:

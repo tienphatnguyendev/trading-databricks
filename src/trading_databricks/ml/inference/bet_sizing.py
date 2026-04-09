@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 import polars as pl
 from scipy.stats import norm
 
 from trading_databricks.ml.config import BetSizingConfig
+
+logger = logging.getLogger(__name__)
 
 _BET_SIZING_COLUMNS = [
     "signal_id", "event_id", "symbol", "event_ts",
@@ -62,10 +66,11 @@ def compute_bet_sizes(
 
     Steps:
     1. Validate sigma_probability > 0.
-    2. Filter by meta_threshold (strictly >) and primary_threshold (strictly >).
-    3. z_score = (meta_confidence - 0.5) / sigma_probability
-    4. raw_bet_size = clip(2 * Phi(z_score) - 1, 0, 1)
-    5. Discretize raw_bet_size into 5 tiers from config.
+    2. Drop any rows with NaN/Null in meta_confidence or primary_confidence (logged).
+    3. Filter by meta_threshold (strictly >) and primary_threshold (strictly >).
+    4. z_score = (meta_confidence - 0.5) / sigma_probability
+    5. raw_bet_size = clip(2 * Phi(z_score) - 1, 0, 1)
+    6. Discretize raw_bet_size into 5 tiers from config.
 
     Args:
         predictions: DataFrame with columns: signal_id, event_id, symbol, event_ts,
@@ -88,7 +93,21 @@ def compute_bet_sizes(
     if config is None:
         config = BetSizingConfig()
 
-    # Step 1: Filter by both thresholds (strictly greater than)
+    # Step 1a: Check for NaN or Null confidences and drop them with a warning
+    nan_mask = (
+        pl.col("meta_confidence").is_nan() | pl.col("meta_confidence").is_null() |
+        pl.col("primary_confidence").is_nan() | pl.col("primary_confidence").is_null()
+    )
+    nan_count = predictions.select(nan_mask.sum()).item()
+    if nan_count > 0:
+        logger.warning(
+            "Dropping %d predictions with NaN/Null confidence values "
+            "(possible upstream model failure)",
+            nan_count,
+        )
+        predictions = predictions.filter(~nan_mask)
+
+    # Step 1b: Filter by both thresholds (strictly greater than)
     filtered = predictions.filter(
         (pl.col("meta_confidence") > config.meta_threshold)
         & (pl.col("primary_confidence") > config.primary_threshold)

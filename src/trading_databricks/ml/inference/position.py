@@ -52,7 +52,7 @@ def compute_positions(signals: pl.DataFrame) -> pl.DataFrame:
             "symbol": [row["symbol"]],
             "side": [side],
             "weight": [float(row["discretized_weight"]) if is_long else 0.0],
-            "confidence": [float(row["meta_confidence"])],
+            "confidence": [float(row["meta_confidence"]) if is_long else 0.0],
             "signal_id": [str(row["signal_id"])],
             "updated_at": [now],
         }
