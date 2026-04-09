@@ -155,3 +155,46 @@ def test_feature_transformers() -> None:
     assert "news_sentiment_score" in (
         t4.fit(events, news_features=None).transform(events).columns
     )
+
+
+def test_feature_union() -> None:
+    from trading_databricks.ml.transformers.feature_transformers import (
+        TechnicalFeatureTransformer,
+        VolatilityFeatureTransformer,
+    )
+    from trading_databricks.ml.transformers.feature_union import PolarsFeatureUnion
+
+    events = pl.DataFrame({
+        "event_id": ["e1"],
+        "symbol": ["BTCUSDT"],
+        "event_ts": [datetime(2026, 1, 1)],
+        "bar_index": [1],
+        "avg_bars_per_day": [10.0],
+    })
+    bars = pl.DataFrame({
+        "bar_index": [1, 2],
+        "symbol": ["BTCUSDT", "BTCUSDT"],
+        "open": [98.0, 108.0],
+        "close": [100.0, 110.0],
+        "high": [105.0, 115.0],
+        "low": [95.0, 105.0],
+        "volume": [1.0, 2.0],
+        "dollar_volume": [100.0, 220.0],
+        "bar_end_time": [datetime(2026, 1, 1), datetime(2026, 1, 2)],
+    })
+
+    union = PolarsFeatureUnion([
+        ("tech", TechnicalFeatureTransformer()),
+        ("vol", VolatilityFeatureTransformer()),
+    ])
+    result = union.fit(events, bars=bars).transform(events)
+
+    # Real feature columns from both transformers must be present
+    assert "rsi_14" in result.columns        # from TechnicalFeatureTransformer
+    assert "realized_vol_20" in result.columns  # from VolatilityFeatureTransformer
+    # Original event columns must survive
+    assert "symbol" in result.columns
+    assert "event_id" in result.columns
+    assert "event_ts" in result.columns
+    # No duplicate columns
+    assert len(result.columns) == len(set(result.columns))
