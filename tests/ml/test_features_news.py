@@ -79,7 +79,7 @@ def test_news_count_aggregated_correctly() -> None:
 
 def test_news_accepted_ratio() -> None:
     """Verify accepted ratio is computed over all impactful news, not just accepted news."""
-    UTC = UTC
+    from datetime import UTC
     events = pl.DataFrame({
         "event_id": ["e1"],
         "symbol": ["BTC"],
