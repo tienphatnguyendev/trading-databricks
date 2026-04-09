@@ -47,3 +47,47 @@ for _, row in pdf.iterrows():
         "story_id": row.get("story_id", "")
     })
 print(f"Loaded {len(states)} articles.")
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## Section 2: Gatekeeper (Stage 1) Deep Dive
+# MAGIC Inspect articles dropped by the spaCy EntityRuler (False Negatives).
+
+# COMMAND ----------
+from trading_databricks.agents.config import GatekeeperConfig  # noqa: E402
+from trading_databricks.agents.gatekeeper import (  # noqa: E402
+    build_nlp,
+    extract_ner_features,
+    is_crypto_relevant,
+)
+
+gk_config = GatekeeperConfig()
+nlp = build_nlp()
+
+gatekeeper_results = []
+for state in states:
+    is_impactful, conf = is_crypto_relevant(
+        state["headline"], state["body"], config=gk_config
+    )
+
+    # Deep dive into exact entities
+    text = state["headline"] + " " + state["body"][:gk_config.text_window]
+    doc = nlp(text)
+    features = extract_ner_features(doc)
+    extracted_entities = [(ent.text, ent.label_) for ent in doc.ents]
+
+    gatekeeper_results.append({
+        "story_id": state.get("story_id"),
+        "headline": state["headline"],
+        "is_impactful": is_impactful,
+        "extracted_entities": extracted_entities,
+        **features
+    })
+
+gk_df = pd.DataFrame(gatekeeper_results)
+print("Gatekeeper Breakdown:")
+print(gk_df["is_impactful"].value_counts())
+
+# Show false negatives (if you know the dataset contains crypto articles)
+print("\nSample articles dropped by Gatekeeper (is_impactful=False):")
+display(gk_df[gk_df["is_impactful"] == False].head(5))  # type: ignore  # noqa: F821, E712

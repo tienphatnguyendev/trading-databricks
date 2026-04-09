@@ -18,3 +18,9 @@ def test_notebook_has_setup_section():
         for node in ast.walk(tree)
     )
     assert dbutils_found, "dbutils.widgets.text not found in notebook"
+
+def test_notebook_has_gatekeeper_section():
+    content = Path("src/trading_databricks/notebooks/mas_interactive_qa.py").read_text()
+    assert "Section 2: Gatekeeper (Stage 1) Deep Dive" in content
+    assert "is_crypto_relevant" in content
+    assert "extract_ner_features" in content
