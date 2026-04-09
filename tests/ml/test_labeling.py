@@ -229,3 +229,11 @@ def test_avg_uniqueness_uses_actual_exit_bar() -> None:
     # Therefore, both should have avg_uniqueness == 1.0
     assert result["avg_uniqueness"][0] == 1.0
     assert result["avg_uniqueness"][1] == 1.0
+
+def test_zero_ewma_vol_does_not_always_label_positive() -> None:
+    """Events with ewma_vol=0 should be skipped or labeled 0, not always 1."""
+    bars = _make_bars([100.0, 101.0, 99.0, 100.0, 100.0] + [100.0]*150)
+    events = _make_events([0], bars, ewma_vol=0.0, avg_bars_per_day=24.0)
+    result = compute_triple_barrier_labels(events, bars)
+    if len(result) > 0:
+        assert result["label"][0] == 0
