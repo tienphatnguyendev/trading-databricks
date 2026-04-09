@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import polars as pl
 
@@ -79,8 +79,7 @@ def test_news_count_aggregated_correctly() -> None:
 
 def test_news_accepted_ratio() -> None:
     """Verify accepted ratio is computed over all impactful news, not just accepted news."""
-    from datetime import timezone
-    UTC = timezone.utc
+    UTC = UTC
     events = pl.DataFrame({
         "event_id": ["e1"],
         "symbol": ["BTC"],
@@ -97,7 +96,7 @@ def test_news_accepted_ratio() -> None:
     }).lazy()
 
     result = compute_news(events, news_features).collect()
-    
+
     # Total impactful news = 4. Accepted = 2. Ratio = 0.5.
     assert result["news_accepted_ratio_Sentiment"][0] == 0.5
     # Only the 2 accepted news count for the features

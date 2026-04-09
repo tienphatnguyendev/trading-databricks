@@ -110,7 +110,7 @@ def test_garman_klass_negative_variance_handling():
     }).lazy()
 
     result = compute_volatility(events, bars).collect()
-    
+
     # Before the fix, garman_klass_20 would be NaN
     gk = result["garman_klass_20"][0]
     assert gk is not None
