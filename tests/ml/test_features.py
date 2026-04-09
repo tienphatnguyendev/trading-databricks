@@ -5,7 +5,12 @@ from datetime import datetime
 
 import polars as pl
 
-from trading_databricks.ml.features import compute_news, compute_technical, compute_volatility, compute_volume
+from trading_databricks.ml.features import (
+    compute_news,
+    compute_technical,
+    compute_volatility,
+    compute_volume,
+)
 
 
 def test_feature_functions_return_expected_columns() -> None:

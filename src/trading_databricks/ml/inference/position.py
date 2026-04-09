@@ -33,27 +33,38 @@ def compute_positions(signals: pl.DataFrame) -> pl.DataFrame:
             "confidence": [0.0],
             "signal_id": [""],
             "updated_at": [now],
-        }
+        },
+        schema={
+            "symbol": pl.Utf8,
+            "side": pl.Utf8,
+            "weight": pl.Float64,
+            "confidence": pl.Float64,
+            "signal_id": pl.Utf8,
+            "updated_at": pl.Datetime("us", "UTC"),
+        },
     )
 
     if signals.is_empty():
         return _flat_position
 
-    # Latest signal by event_ts
-    latest = signals.sort("event_ts", descending=True).head(1)
-    row = latest.row(0, named=True)
+    is_long = pl.col("primary_side") == 1
 
-    primary_side = int(row["primary_side"])
-    is_long = primary_side == 1
-    side = "long" if is_long else "flat"
-
-    return pl.DataFrame(
-        {
-            "symbol": [row["symbol"]],
-            "side": [side],
-            "weight": [float(row["discretized_weight"]) if is_long else 0.0],
-            "confidence": [float(row["meta_confidence"]) if is_long else 0.0],
-            "signal_id": [str(row["signal_id"])],
-            "updated_at": [now],
-        }
+    return (
+        signals.sort("event_ts", descending=True)
+        .group_by("symbol", maintain_order=True)
+        .first()
+        .with_columns(
+            pl.when(is_long).then(pl.lit("long")).otherwise(pl.lit("flat")).alias("side"),
+            pl.when(is_long)
+            .then(pl.col("discretized_weight").cast(pl.Float64))
+            .otherwise(pl.lit(0.0))
+            .alias("weight"),
+            pl.when(is_long)
+            .then(pl.col("meta_confidence").cast(pl.Float64))
+            .otherwise(pl.lit(0.0))
+            .alias("confidence"),
+            pl.lit(now).alias("updated_at"),
+            pl.col("signal_id").cast(pl.Utf8),
+        )
+        .select(["symbol", "side", "weight", "confidence", "signal_id", "updated_at"])
     )

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 
 import polars as pl
 
@@ -124,7 +124,7 @@ def test_technical_log_zero_handling():
     }).lazy()
 
     result = compute_technical(events, bars).collect()
-    
+
     # log_return_5 should be null, not NaN or -inf
     assert result["log_return_5"][0] is None
 
@@ -146,6 +146,6 @@ def test_technical_macd_min_periods():
     }).lazy()
 
     result = compute_technical(events, bars).collect()
-    
+
     # macd_signal should be null because we haven't reached min_periods=26
     assert result["macd_signal"][0] is None
