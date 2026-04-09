@@ -237,3 +237,12 @@ def test_zero_ewma_vol_does_not_always_label_positive() -> None:
     result = compute_triple_barrier_labels(events, bars)
     if len(result) > 0:
         assert result["label"][0] == 0
+
+def test_event_with_nonexistent_bar_index_skipped() -> None:
+    """Events whose bar_index doesn't exist in bars should be skipped."""
+    bars = _make_bars([100.0] * 1500)
+    import polars as pl
+    bars = bars.filter(pl.col("bar_index") != 999)  # remove bar 999
+    events = _make_events([999], bars, ewma_vol=0.02, avg_bars_per_day=24.0)
+    result = compute_triple_barrier_labels(events, bars)
+    assert len(result) == 0

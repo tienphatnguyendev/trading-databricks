@@ -60,7 +60,7 @@ def compute_triple_barrier_labels(
         on="bar_index",
         how="left",
         suffix="_bar",
-    )
+    ).filter(pl.col("close").is_not_null())
 
     # --- Step 2: Compute barrier levels (vectorized) ---
     events_with_close = events_with_close.with_columns(
