@@ -58,8 +58,6 @@ def assemble_training_dataset(
         df = df.with_columns(pl.lit(1).cast(pl.Int32).alias("cpcv_group"))
 
     # Stamp dataset_version
-    df = df.with_columns(
-        pl.lit(datetime.now(UTC).isoformat()).alias("dataset_version")
-    )
+    df = df.with_columns(pl.lit(datetime.now(UTC).isoformat()).alias("dataset_version"))
 
     return df

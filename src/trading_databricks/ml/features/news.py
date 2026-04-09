@@ -7,8 +7,14 @@ import polars as pl
 from trading_databricks.ml.config import FeatureConfig
 
 _L1_CATEGORIES = [
-    "Sentiment", "DeFi", "Supply", "Exchange",
-    "Macro", "Adoption", "Security", "Regulation",
+    "Sentiment",
+    "DeFi",
+    "Supply",
+    "Exchange",
+    "Macro",
+    "Adoption",
+    "Security",
+    "Regulation",
 ]
 
 _NEWS_SCHEMA: dict[str, pl.PolarsDataType] = {
@@ -95,10 +101,11 @@ def compute_news(
         for l1 in _L1_CATEGORIES:
             all_cat = window.filter(pl.col("l1_category") == l1)
             total_cat_cnt = len(all_cat)
-            
+
             row[f"news_accepted_ratio_{l1}"] = (
                 float((all_cat["validation_status"] == "accepted").mean())
-                if total_cat_cnt > 0 else 0.0
+                if total_cat_cnt > 0
+                else 0.0
             )
 
             cat = all_cat.filter(pl.col("validation_status") == "accepted")
@@ -117,7 +124,7 @@ def compute_news(
                 row[f"news_direction_{l1}"] = int(direction_mode)
             else:
                 row[f"news_direction_{l1}"] = 0
-                
+
             total_count += cnt
             if cnt > 0:
                 sentiment_score += float(
