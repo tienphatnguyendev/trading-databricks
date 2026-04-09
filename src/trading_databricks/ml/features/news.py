@@ -66,9 +66,7 @@ def compute_news(
     if events_df.is_empty():
         return pl.DataFrame(schema=_NEWS_SCHEMA).lazy()
 
-    news_df = news_features.filter(
-        (pl.col("is_impactful")) & (pl.col("validation_status") == "accepted")
-    ).collect()
+    news_df = news_features.filter(pl.col("is_impactful")).collect()
 
     if news_df.is_empty():
         return _build_zero_frame(events, now)
@@ -95,7 +93,15 @@ def compute_news(
         sentiment_score = 0.0
 
         for l1 in _L1_CATEGORIES:
-            cat = window.filter(pl.col("l1_category") == l1)
+            all_cat = window.filter(pl.col("l1_category") == l1)
+            total_cat_cnt = len(all_cat)
+            
+            row[f"news_accepted_ratio_{l1}"] = (
+                float((all_cat["validation_status"] == "accepted").mean())
+                if total_cat_cnt > 0 else 0.0
+            )
+
+            cat = all_cat.filter(pl.col("validation_status") == "accepted")
             cnt = len(cat)
             row[f"news_count_{l1}"] = cnt
             row[f"news_max_conf_{l1}"] = (
@@ -109,12 +115,9 @@ def compute_news(
                     .sort("cnt", descending=True)["expected_direction"][0]
                 )
                 row[f"news_direction_{l1}"] = int(direction_mode)
-                row[f"news_accepted_ratio_{l1}"] = float(
-                    (cat["validation_status"] == "accepted").mean()
-                )
             else:
                 row[f"news_direction_{l1}"] = 0
-                row[f"news_accepted_ratio_{l1}"] = 0.0
+                
             total_count += cnt
             if cnt > 0:
                 sentiment_score += float(
