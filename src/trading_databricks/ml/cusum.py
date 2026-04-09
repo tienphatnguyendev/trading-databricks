@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import uuid
 from datetime import UTC, datetime
 
@@ -92,7 +93,11 @@ def detect_cusum_events(
 
     # --- Step 1: Vectorized log returns ---
     bars = bars.with_columns(
-        pl.col("close").log().diff().alias("log_return"),
+        pl.when(pl.col("close") > 0)
+        .then(pl.col("close").log())
+        .otherwise(None)
+        .diff()
+        .alias("log_return"),
     )
 
     # --- Step 2: EWMA volatility (vectorized) ---
@@ -108,17 +113,13 @@ def detect_cusum_events(
 
     # --- Step 3: avg_bars_per_day + rolling threshold ---
     # Compute avg bars per day: bars_seen / days_elapsed
-    min_ts = bars["bar_end_time"].min()
     lookback_size = int(75 * config.lookback_days)
     # initial estimate: 2250 bars for 30 days
 
     # Calculate seconds since min_ts and convert to days, ensuring minimum of 1.0
-    days_since_start_expr = (
-        (pl.col("bar_end_time") - pl.lit(min_ts))
-        .cast(pl.Duration)
-        .dt.total_seconds()
-        / 86400.0
-    )
+    days_since_start_expr = (pl.col("bar_end_time") - pl.lit(min_ts)).cast(
+        pl.Duration
+    ).dt.total_seconds() / 86400.0
     bars = bars.with_columns(
         pl.when(days_since_start_expr < 1.0)
         .then(1.0)
@@ -130,7 +131,7 @@ def detect_cusum_events(
     bars = bars.with_columns(
         (
             pl.min_horizontal(
-                pl.col("bar_index").cast(pl.Float64),
+                (pl.int_range(pl.len()) + 1).cast(pl.Float64),
                 pl.lit(float(lookback_size)),
             )
             / pl.col("_days_since_start")
@@ -159,6 +160,9 @@ def detect_cusum_events(
             continue  # zero-vol guard: skip bar, don't update accumulators
 
         threshold = row["threshold"]
+        if threshold is None or (isinstance(threshold, float) and math.isnan(threshold)):
+            continue
+
         s_pos = max(0.0, s_pos + lr)
         s_neg = min(0.0, s_neg + lr)
 
