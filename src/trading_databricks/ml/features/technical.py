@@ -54,10 +54,10 @@ def compute_technical(
         ).alias("rsi_14"),
         # MACD signal (EMA12 - EMA26, then EMA9 of that)
         (
-            pl.col("close").ewm_mean(span=12, min_periods=1)
-            - pl.col("close").ewm_mean(span=26, min_periods=1)
+            pl.col("close").ewm_mean(span=12, min_samples=12)
+            - pl.col("close").ewm_mean(span=26, min_samples=26)
         )
-        .ewm_mean(span=9, min_periods=1)
+        .ewm_mean(span=9, min_samples=9)
         .alias("macd_signal"),
         # Bollinger %B = (close - lower) / (upper - lower)
         # lower = SMA - 2*std, upper = SMA + 2*std, bandwidth = 4*std

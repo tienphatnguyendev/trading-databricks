@@ -127,3 +127,25 @@ def test_technical_log_zero_handling():
     
     # log_return_5 should be null, not NaN or -inf
     assert result["log_return_5"][0] is None
+
+def test_technical_macd_min_periods():
+    """Verify MACD is null for early bars to prevent unstable EMA signals."""
+    bars = pl.DataFrame({
+        "bar_index": list(range(10)),  # Only 10 bars (less than 26)
+        "open": [10.0] * 10,
+        "high": [11.0] * 10,
+        "low": [9.0] * 10,
+        "close": [10.5] * 10,
+    }).lazy()
+
+    events = pl.DataFrame({
+        "event_id": ["e1"],
+        "symbol": ["BTC"],
+        "event_ts": [datetime(2024, 1, 1, tzinfo=UTC)],
+        "bar_index": [9],
+    }).lazy()
+
+    result = compute_technical(events, bars).collect()
+    
+    # macd_signal should be null because we haven't reached min_periods=26
+    assert result["macd_signal"][0] is None
