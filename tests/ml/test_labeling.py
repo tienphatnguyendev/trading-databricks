@@ -40,9 +40,7 @@ def _make_events(
         {
             "event_id": [f"evt-{i}" for i in bar_indices],
             "symbol": [symbol] * len(bar_indices),
-            "event_ts": [
-                base_dt + timedelta(hours=idx + 1) for idx in bar_indices
-            ],
+            "event_ts": [base_dt + timedelta(hours=idx + 1) for idx in bar_indices],
             "bar_index": bar_indices,
             "log_return": [0.01] * len(bar_indices),
             "cusum_side": ["up"] * len(bar_indices),
@@ -75,9 +73,9 @@ def test_barrier_levels_are_computed_correctly() -> None:
     assert "vertical_bar" in result.columns
     # With 500 bars and event at bar 10, vertical_bar = 10 + 5*24 = 130 (well within 500)
     assert len(result) == 1
-    assert abs(result["upper_level"][0] - 100.0 * 1.04) < 1e-9   # 100*(1+2*0.02)
-    assert abs(result["lower_level"][0] - 100.0 * 0.98) < 1e-9   # 100*(1-1*0.02)
-    assert result["vertical_bar"][0] == 10 + 5 * 24               # 130
+    assert abs(result["upper_level"][0] - 100.0 * 1.04) < 1e-9  # 100*(1+2*0.02)
+    assert abs(result["lower_level"][0] - 100.0 * 0.98) < 1e-9  # 100*(1-1*0.02)
+    assert result["vertical_bar"][0] == 10 + 5 * 24  # 130
 
 
 def test_upper_barrier_hit() -> None:
@@ -164,11 +162,10 @@ def test_avg_uniqueness_single_event_is_one() -> None:
 
 def test_avg_uniqueness_overlapping_events_below_one() -> None:
     """Two overlapping events → avg_uniqueness < 1.0."""
-    # Event A at bar 0, vertical_bar=120. Event B at bar 50, vertical_bar=170.
-    # Overlap [50,120], so A.uniqueness < 1.0
-    closes = [100.0] + [104.5] + [104.5] * 498
+    # Event A at bar 0, B at bar 2. Both exit at bar 5.
+    closes = [100.0, 100.0, 100.0, 100.0, 100.0, 110.0] + [110.0] * 494
     bars = _make_bars(closes)
-    events = _make_events([0, 50], bars, ewma_vol=0.02, avg_bars_per_day=24.0)
+    events = _make_events([0, 2], bars, ewma_vol=0.02, avg_bars_per_day=24.0)
     result = compute_triple_barrier_labels(events, bars)
     if len(result) == 2:
         assert result["avg_uniqueness"][0] < 1.0
@@ -182,9 +179,17 @@ def test_output_columns_match_schema() -> None:
     result = compute_triple_barrier_labels(events, bars)
 
     expected = {
-        "event_id", "symbol", "event_ts", "label",
-        "barrier_hit", "return_pct", "upper_level", "lower_level",
-        "vertical_bar", "matured_at", "avg_uniqueness",
+        "event_id",
+        "symbol",
+        "event_ts",
+        "label",
+        "barrier_hit",
+        "return_pct",
+        "upper_level",
+        "lower_level",
+        "vertical_bar",
+        "matured_at",
+        "avg_uniqueness",
     }
     assert set(result.columns) == expected
     assert result.dtypes[result.columns.index("label")] == pl.Int32
@@ -192,3 +197,64 @@ def test_output_columns_match_schema() -> None:
     assert result.dtypes[result.columns.index("avg_uniqueness")] == pl.Float64
     # _bar_index should NOT appear in output
     assert "_bar_index" not in result.columns
+
+
+def test_entry_close_zero_skipped_gracefully() -> None:
+    """Events with close=0 must be skipped, not crash."""
+    closes = [0.0] + [100.0] * 150
+    bars = _make_bars(closes)
+    events = _make_events([0], bars, ewma_vol=0.02, avg_bars_per_day=24.0)
+    result = compute_triple_barrier_labels(events, bars)
+    assert len(result) == 0
+
+
+def test_avg_uniqueness_uses_actual_exit_bar() -> None:
+    """Events that hit upper/lower barrier early should have higher avg_uniqueness."""
+    bars_list = [100.0, 101.0, 110.0] + [100.0] * 120
+    bars = _make_bars(bars_list)
+    events = _make_events([0], bars, ewma_vol=0.05, avg_bars_per_day=24.0)
+    result = compute_triple_barrier_labels(events, bars)
+
+    assert len(result) == 1
+    assert result["avg_uniqueness"][0] == 1.0
+
+
+def test_avg_uniqueness_no_overlap_due_to_early_exit() -> None:
+    """Early exits should prevent overlap and keep avg_uniqueness at 1.0."""
+    # Bars:
+    # 0: 100
+    # 1: 101
+    # 2: 120 (Event A exits here!)
+    # ...
+    # 5: 100 (Event B starts here)
+    # ...
+    bars_list = [100.0, 101.0, 120.0, 100.0, 100.0, 100.0] + [100.0] * 150
+    bars = _make_bars(bars_list)
+    events = _make_events([0, 5], bars, ewma_vol=0.05, avg_bars_per_day=24.0)
+
+    result = compute_triple_barrier_labels(events, bars)
+    assert len(result) == 2
+    # If A exits at bar 2, and B starts at bar 5, they do not overlap at all!
+    # Therefore, both should have avg_uniqueness == 1.0
+    assert result["avg_uniqueness"][0] == 1.0
+    assert result["avg_uniqueness"][1] == 1.0
+
+
+def test_zero_ewma_vol_does_not_always_label_positive() -> None:
+    """Events with ewma_vol=0 should be skipped or labeled 0, not always 1."""
+    bars = _make_bars([100.0, 101.0, 99.0, 100.0, 100.0] + [100.0] * 150)
+    events = _make_events([0], bars, ewma_vol=0.0, avg_bars_per_day=24.0)
+    result = compute_triple_barrier_labels(events, bars)
+    if len(result) > 0:
+        assert result["label"][0] == 0
+
+
+def test_event_with_nonexistent_bar_index_skipped() -> None:
+    """Events whose bar_index doesn't exist in bars should be skipped."""
+    bars = _make_bars([100.0] * 1500)
+    import polars as pl
+
+    bars = bars.filter(pl.col("bar_index") != 999)  # remove bar 999
+    events = _make_events([999], bars, ewma_vol=0.02, avg_bars_per_day=24.0)
+    result = compute_triple_barrier_labels(events, bars)
+    assert len(result) == 0
