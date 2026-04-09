@@ -43,48 +43,60 @@ def compute_volume(
         config = FeatureConfig()
     now = datetime.now(UTC)
 
-    bars_sorted = bars.sort("bar_index").with_columns(
-        (pl.col("close") * pl.col("volume")).alias("_dollar_vol"),
-    ).with_columns(
-        # VWAP rolling 20 bars
-        (
-            pl.col("_dollar_vol").rolling_sum(20)
-            / (pl.col("volume").rolling_sum(20) + 1e-12)
-        ).alias("_vwap_20"),
-        # Rolling mean volume
-        pl.col("volume").rolling_mean(20).alias("_vol_mean_20"),
-        # Rolling mean dollar volume
-        pl.col("_dollar_vol").rolling_mean(20).alias("_dv_mean_20"),
-        # OBV (signed volume)
-        pl.when(pl.col("close").diff() > 0)
-        .then(pl.col("volume"))
-        .when(pl.col("close").diff() < 0)
-        .then(-pl.col("volume"))
-        .otherwise(0.0)
-        .cum_sum()
-        .alias("_obv"),
-    ).with_columns(
-        # VWAP deviation
-        ((pl.col("close") - pl.col("_vwap_20")) / (pl.col("_vwap_20") + 1e-12))
-        .alias("vwap_dev_20"),
-        # Relative volume
-        (pl.col("volume") / (pl.col("_vol_mean_20") + 1e-12)).alias("relative_volume_20"),
-        # Dollar volume ratio
-        (pl.col("_dollar_vol") / (pl.col("_dv_mean_20") + 1e-12))
-        .alias("dollar_volume_ratio"),
-        # OBV slope via rolling_map
-        pl.col("_obv")
-        .rolling_map(_obv_slope_fn, window_size=20)
-        .alias("obv_slope_20"),
-        pl.lit(now).alias("computed_at"),
+    bars_sorted = (
+        bars.sort("bar_index")
+        .with_columns(
+            (pl.col("close") * pl.col("volume")).alias("_dollar_vol"),
+        )
+        .with_columns(
+            # VWAP rolling 20 bars
+            (
+                pl.col("_dollar_vol").rolling_sum(20)
+                / (pl.col("volume").rolling_sum(20) + 1e-12)
+            ).alias("_vwap_20"),
+            # Rolling mean volume
+            pl.col("volume").rolling_mean(20).alias("_vol_mean_20"),
+            # Rolling mean dollar volume
+            pl.col("_dollar_vol").rolling_mean(20).alias("_dv_mean_20"),
+            # OBV (signed volume)
+            pl.when(pl.col("close").diff() > 0)
+            .then(pl.col("volume"))
+            .when(pl.col("close").diff() < 0)
+            .then(-pl.col("volume"))
+            .otherwise(0.0)
+            .cum_sum()
+            .alias("_obv"),
+        )
+        .with_columns(
+            # VWAP deviation
+            ((pl.col("close") - pl.col("_vwap_20")) / (pl.col("_vwap_20") + 1e-12)).alias(
+                "vwap_dev_20"
+            ),
+            # Relative volume
+            (pl.col("volume") / (pl.col("_vol_mean_20") + 1e-12)).alias(
+                "relative_volume_20"
+            ),
+            # Dollar volume ratio
+            (pl.col("_dollar_vol") / (pl.col("_dv_mean_20") + 1e-12)).alias(
+                "dollar_volume_ratio"
+            ),
+            # OBV slope via rolling_map
+            pl.col("_obv")
+            .rolling_map(_obv_slope_fn, window_size=20)
+            .alias("obv_slope_20"),
+            pl.lit(now).alias("computed_at"),
+        )
     )
 
     feature_cols = [
-        "bar_index", "computed_at",
-        "vwap_dev_20", "relative_volume_20", "obv_slope_20", "dollar_volume_ratio",
+        "bar_index",
+        "computed_at",
+        "vwap_dev_20",
+        "relative_volume_20",
+        "obv_slope_20",
+        "dollar_volume_ratio",
     ]
 
-    return (
-        events.join(bars_sorted.select(feature_cols), on="bar_index", how="left")
-        .select(list(_VOLUME_SCHEMA.keys()))
-    )
+    return events.join(
+        bars_sorted.select(feature_cols), on="bar_index", how="left"
+    ).select(list(_VOLUME_SCHEMA.keys()))

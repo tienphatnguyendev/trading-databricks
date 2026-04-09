@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 
 import polars as pl
 
@@ -104,3 +104,48 @@ def test_empty_events_returns_empty_lazyframe() -> None:
     result = compute_technical(events, bars).collect()
     assert result.is_empty()
     assert "rsi_14" in result.columns
+
+def test_technical_log_zero_handling():
+    """Verify that log(0) does not produce NaN/inf for log returns."""
+    # Create bars where close drops to 0
+    bars = pl.DataFrame({
+        "bar_index": list(range(25)),
+        "open": [10.0] * 25,
+        "high": [10.0] * 25,
+        "low": [10.0] * 25,
+        "close": [10.0] * 24 + [0.0],  # Last bar is 0
+    }).lazy()
+
+    events = pl.DataFrame({
+        "event_id": ["e1"],
+        "symbol": ["BTC"],
+        "event_ts": [datetime(2024, 1, 1, tzinfo=UTC)],
+        "bar_index": [24],
+    }).lazy()
+
+    result = compute_technical(events, bars).collect()
+    
+    # log_return_5 should be null, not NaN or -inf
+    assert result["log_return_5"][0] is None
+
+def test_technical_macd_min_periods():
+    """Verify MACD is null for early bars to prevent unstable EMA signals."""
+    bars = pl.DataFrame({
+        "bar_index": list(range(10)),  # Only 10 bars (less than 26)
+        "open": [10.0] * 10,
+        "high": [11.0] * 10,
+        "low": [9.0] * 10,
+        "close": [10.5] * 10,
+    }).lazy()
+
+    events = pl.DataFrame({
+        "event_id": ["e1"],
+        "symbol": ["BTC"],
+        "event_ts": [datetime(2024, 1, 1, tzinfo=UTC)],
+        "bar_index": [9],
+    }).lazy()
+
+    result = compute_technical(events, bars).collect()
+    
+    # macd_signal should be null because we haven't reached min_periods=26
+    assert result["macd_signal"][0] is None

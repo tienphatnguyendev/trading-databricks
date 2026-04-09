@@ -76,3 +76,29 @@ def test_news_count_aggregated_correctly() -> None:
     assert result["news_direction_Sentiment"][0] == 1
     assert result["news_volume_24h"][0] == 1
     assert result["has_news_24h"][0] is True
+
+def test_news_accepted_ratio() -> None:
+    """Verify accepted ratio is computed over all impactful news, not just accepted news."""
+    from datetime import timezone
+    UTC = timezone.utc
+    events = pl.DataFrame({
+        "event_id": ["e1"],
+        "symbol": ["BTC"],
+        "event_ts": [datetime(2024, 1, 2, tzinfo=UTC)],
+    }).lazy()
+
+    news_features = pl.DataFrame({
+        "published_at": [datetime(2024, 1, 1, 12, tzinfo=UTC)] * 4,
+        "is_impactful": [True, True, True, True],
+        "validation_status": ["accepted", "accepted", "rejected", "rejected"],
+        "l1_category": ["Sentiment"] * 4,
+        "confidence": [0.9, 0.8, 0.5, 0.4],
+        "expected_direction": [1, -1, 0, 0]
+    }).lazy()
+
+    result = compute_news(events, news_features).collect()
+    
+    # Total impactful news = 4. Accepted = 2. Ratio = 0.5.
+    assert result["news_accepted_ratio_Sentiment"][0] == 0.5
+    # Only the 2 accepted news count for the features
+    assert result["news_count_Sentiment"][0] == 2

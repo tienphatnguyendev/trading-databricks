@@ -37,37 +37,46 @@ def compute_volatility(
     now = datetime.now(UTC)
     ln2 = math.log(2)
 
-    bars_with_vol = bars.sort("bar_index").with_columns(
-        pl.col("close").log().diff().alias("_log_ret"),
-        (pl.col("high") / pl.col("low")).log().pow(2).alias("_log_hl_sq"),
-        (pl.col("close") / pl.col("open")).log().pow(2).alias("_log_co_sq"),
-        (pl.col("high") / pl.col("low")).log().pow(2).mul(0.5).alias("_log_hl_half"),
-    ).with_columns(
-        # UN-annualized rolling volatility (annualized post-join with event avg_bars_per_day)
-        pl.col("_log_ret").rolling_std(20).alias("realized_vol_20"),
-        pl.col("_log_ret").rolling_std(50).alias("realized_vol_50"),
-        # Parkinson: sqrt(rolling_mean(log(H/L)^2) / (4*ln2))
-        (pl.col("_log_hl_sq").rolling_mean(20) / (4 * ln2))
-        .sqrt()
-        .alias("parkinson_vol_20"),
-        # Garman-Klass: sqrt(rolling_mean(0.5*ln(H/L)^2 - (2*ln2-1)*ln(C/O)^2))
-        (
-            pl.col("_log_hl_half")
-            - pl.col("_log_co_sq").mul(2 * ln2 - 1)
+    bars_with_vol = (
+        bars.sort("bar_index")
+        .with_columns(
+            pl.col("close").log().diff().alias("_log_ret"),
+            (pl.col("high") / pl.col("low")).log().pow(2).alias("_log_hl_sq"),
+            (pl.col("close") / pl.col("open")).log().pow(2).alias("_log_co_sq"),
+            (pl.col("high") / pl.col("low")).log().pow(2).mul(0.5).alias("_log_hl_half"),
         )
-        .rolling_mean(20)
-        .sqrt()
-        .alias("garman_klass_20"),
-    ).with_columns(
-        (pl.col("realized_vol_20") / (pl.col("realized_vol_50") + 1e-12))
-        .alias("vol_ratio_20_50"),
-        pl.lit(now).alias("computed_at"),
+        .with_columns(
+            # UN-annualized rolling volatility
+            # (annualized post-join with event avg_bars_per_day)
+            pl.col("_log_ret").rolling_std(20).alias("realized_vol_20"),
+            pl.col("_log_ret").rolling_std(50).alias("realized_vol_50"),
+            # Parkinson: sqrt(rolling_mean(log(H/L)^2) / (4*ln2))
+            (pl.col("_log_hl_sq").rolling_mean(20) / (4 * ln2))
+            .sqrt()
+            .alias("parkinson_vol_20"),
+            # Garman-Klass: sqrt(rolling_mean(0.5*ln(H/L)^2 - (2*ln2-1)*ln(C/O)^2))
+            (pl.col("_log_hl_half") - pl.col("_log_co_sq").mul(2 * ln2 - 1))
+            .rolling_mean(20)
+            .clip(lower_bound=0.0)
+            .sqrt()
+            .alias("garman_klass_20"),
+        )
+        .with_columns(
+            (pl.col("realized_vol_20") / (pl.col("realized_vol_50") + 1e-12)).alias(
+                "vol_ratio_20_50"
+            ),
+            pl.lit(now).alias("computed_at"),
+        )
     )
 
     feature_cols = [
-        "bar_index", "computed_at",
-        "realized_vol_20", "realized_vol_50",
-        "parkinson_vol_20", "garman_klass_20", "vol_ratio_20_50",
+        "bar_index",
+        "computed_at",
+        "realized_vol_20",
+        "realized_vol_50",
+        "parkinson_vol_20",
+        "garman_klass_20",
+        "vol_ratio_20_50",
     ]
 
     # Join to events, then annualize using event-specific avg_bars_per_day
