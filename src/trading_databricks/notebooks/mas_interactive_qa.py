@@ -261,3 +261,54 @@ try:
 
 except Exception as e:
     print(f"Skipping Validator execution: {e}")
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## Section 6: End-to-End Evaluation via MLflow
+# MAGIC Execute the full compiled LangGraph on a test batch and log traces to MLflow.
+
+# COMMAND ----------
+import time  # noqa: E402
+
+from trading_databricks.agents.graph import build_mas_graph  # noqa: E402
+
+try:
+    # Compile graph
+    graph = build_mas_graph(config=MASConfig())
+
+    # Run a small E2E batch (e.g., 2 articles) to avoid massive LLM costs in the sandbox
+    batch_states = states[:2]
+
+    e2e_results = []
+
+    with mlflow.start_run(run_name="Interactive_QA_Batch"):
+        for state in batch_states:
+            print(f"Processing story_id: {state.get('story_id')}...")
+            start_time = time.time()
+
+            # Invoke Graph
+            final_state = graph.invoke(state)
+
+            latency = time.time() - start_time
+
+            e2e_results.append({
+                "story_id": final_state.get("story_id"),
+                "headline": final_state.get("headline"),
+                "extraction_path": final_state.get("extraction_path"),
+                "validation_status": final_state.get("validation_status"),
+                "latency_sec": round(latency, 2)
+            })
+
+    e2e_df = pd.DataFrame(e2e_results)
+    print("\nE2E Evaluation Summary:")
+    display(e2e_df) # type: ignore  # noqa: F821
+
+    print("\nMetrics:")
+    print(e2e_df["validation_status"].value_counts())
+    print(
+        "\nCheck the MLflow Experiment UI to view the "
+        "full execution traces for these runs."
+    )
+
+except Exception as e:
+    print(f"Skipping E2E execution (requires active dependencies): {e}")

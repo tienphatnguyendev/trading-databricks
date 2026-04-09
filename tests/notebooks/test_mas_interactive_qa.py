@@ -42,3 +42,9 @@ def test_notebook_has_validator_section():
     assert "Section 5: Mechanism Validator (Constraints Debugging)" in content
     assert "validate_extraction" in content
     assert "_validate_evidence_spans" in content
+
+def test_notebook_has_e2e_section():
+    content = Path("src/trading_databricks/notebooks/mas_interactive_qa.py").read_text()
+    assert "Section 6: End-to-End Evaluation via MLflow" in content
+    assert "build_mas_graph" in content
+    assert "mlflow.start_run" in content
