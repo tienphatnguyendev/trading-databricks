@@ -134,7 +134,7 @@ def detect_cusum_events(
     bars = bars.with_columns(
         (
             pl.min_horizontal(
-                pl.col("bar_index").cast(pl.Float64),
+                (pl.int_range(pl.len()) + 1).cast(pl.Float64),
                 pl.lit(float(lookback_size)),
             )
             / pl.col("_days_since_start")

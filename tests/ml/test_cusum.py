@@ -235,3 +235,19 @@ def test_close_zero_does_not_corrupt_pipeline() -> None:
     result = detect_cusum_events(bars)
     # Should either skip the bad bar or return empty, not produce NaN in the output
     assert result.select(pl.col(pl.Float64).is_nan().any()).sum_horizontal().item() == 0
+
+def test_nonzero_based_bar_index_produces_same_events() -> None:
+    """bar_index starting at 50000 should produce same events as starting at 0."""
+    closes = [100.0] * 100 + [110.0] * 100
+    bars_zero = _make_bars(closes, hours_per_bar=4.5)
+    bars_offset = bars_zero.with_columns(
+        (pl.col("bar_index") + 50000).alias("bar_index")
+    )
+    events_zero = detect_cusum_events(bars_zero)
+    events_offset = detect_cusum_events(bars_offset)
+    assert len(events_zero) == len(events_offset)
+    assert len(events_zero) > 0  # ensure we're actually testing something
+    
+    # The thresholds and avg_bars_per_day must be identical regardless of bar_index offset
+    assert events_zero["avg_bars_per_day"].to_list() == events_offset["avg_bars_per_day"].to_list()
+    assert events_zero["threshold_used"].to_list() == events_offset["threshold_used"].to_list()
