@@ -116,15 +116,22 @@ class CPCVSplitter:
     def _embargo(
         self, train_idx: np.ndarray, test_idx: np.ndarray, n_samples: int
     ) -> np.ndarray:
-        """Remove embargo_pct × n_samples samples immediately after test group end."""
+        """Remove embargo_pct × n_samples samples immediately after each test group segment."""
         if len(test_idx) == 0:
             return train_idx
 
         embargo_size = max(1, int(self.config.embargo_pct * n_samples))
-        test_max_idx = int(test_idx.max())
-        embargo_set = set(
-            range(test_max_idx + 1, min(test_max_idx + 1 + embargo_size, n_samples))
-        )
+        
+        # Find contiguous segments of test indices and embargo after each
+        sorted_test = np.sort(test_idx)
+        gaps = np.where(np.diff(sorted_test) > 1)[0]
+        segment_ends = np.append(sorted_test[gaps], sorted_test[-1])
+
+        embargo_set: set[int] = set()
+        for seg_end in segment_ends:
+            for j in range(int(seg_end) + 1, min(int(seg_end) + 1 + embargo_size, n_samples)):
+                embargo_set.add(j)
+
         return np.array([i for i in train_idx if i not in embargo_set], dtype=int)
 
     def get_backtest_paths(self) -> list[list[tuple[int, ...]]]:
