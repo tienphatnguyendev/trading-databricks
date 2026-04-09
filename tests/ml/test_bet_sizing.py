@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import logging
 
 import polars as pl
 import pytest
@@ -128,3 +129,28 @@ def test_discretization_tier_boundaries() -> None:
             f"raw_target={raw_target:.2f}, raw_got={raw_got:.4f}, "
             f"expected_disc={expected_disc}, got={disc}"
         )
+
+
+def test_nan_or_null_confidence_logged_and_dropped(caplog) -> None:
+    """NaN or Null predictions should be logged as warnings and excluded."""
+    preds = pl.DataFrame(
+        {
+            "signal_id": ["sig-0", "sig-1", "sig-2"],
+            "event_id": ["evt-0", "evt-1", "evt-2"],
+            "symbol": ["BTCUSDT"] * 3,
+            "event_ts": [datetime(2025, 1, 1)] * 3,
+            "primary_side": [1, 1, 1],
+            "primary_confidence": [0.70, float("nan"), 0.80],
+            "meta_label": [1] * 3,
+            "meta_confidence": [0.80, 0.90, None],
+            "primary_model_version": [1] * 3,
+            "meta_model_version": [1] * 3,
+        }
+    )
+    with caplog.at_level(logging.WARNING):
+        result = compute_bet_sizes(preds, sigma_probability=0.10)
+
+    # Only sig-0 should pass (both confidences are valid and > thresholds)
+    assert len(result) == 1
+    assert result["signal_id"][0] == "sig-0"
+    assert "Dropping 2 predictions with NaN/Null confidence values" in caplog.text
