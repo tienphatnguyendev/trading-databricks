@@ -163,6 +163,9 @@ def detect_cusum_events(
             continue  # zero-vol guard: skip bar, don't update accumulators
 
         threshold = row["threshold"]
+        if threshold is None or (isinstance(threshold, float) and threshold != threshold):
+            continue
+
         s_pos = max(0.0, s_pos + lr)
         s_neg = min(0.0, s_neg + lr)
 

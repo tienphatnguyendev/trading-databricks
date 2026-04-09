@@ -251,3 +251,15 @@ def test_nonzero_based_bar_index_produces_same_events() -> None:
     # The thresholds and avg_bars_per_day must be identical regardless of bar_index offset
     assert events_zero["avg_bars_per_day"].to_list() == events_offset["avg_bars_per_day"].to_list()
     assert events_zero["threshold_used"].to_list() == events_offset["threshold_used"].to_list()
+
+def test_cusum_does_not_crash_on_degenerate_threshold() -> None:
+    """Bars that produce NaN/None threshold must not crash."""
+    closes = [100.0] * 200
+    bars = _make_bars(closes, hours_per_bar=4.5)
+    
+    # Inject NaN threshold multiplier to force NaN thresholds
+    config = CUSUMConfig(threshold_multiplier=float("nan"))
+    
+    # Should handle this gracefully and not crash
+    result = detect_cusum_events(bars, config=config)
+    assert isinstance(result, pl.DataFrame)
