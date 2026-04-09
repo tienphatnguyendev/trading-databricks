@@ -19,5 +19,17 @@ def compute_sample_weights(labels: pl.DataFrame) -> np.ndarray:
 
     Raises:
         polars.exceptions.ColumnNotFoundError: If 'avg_uniqueness' column is absent.
+        ValueError: If weights contain NaN or non-positive values.
     """
-    return labels.get_column("avg_uniqueness").to_numpy().astype(np.float64)
+    weights = labels.get_column("avg_uniqueness").to_numpy().astype(np.float64)
+    
+    n_nan = int(np.isnan(weights).sum())
+    n_nonpos = int((weights <= 0.0).sum()) - n_nan  # exclude NaN from nonpos count
+    
+    if n_nan > 0 or n_nonpos > 0:
+        raise ValueError(
+            f"Invalid sample weights: {n_nan} NaN, {n_nonpos} non-positive. "
+            "Check upstream labeling for degenerate events."
+        )
+        
+    return weights
