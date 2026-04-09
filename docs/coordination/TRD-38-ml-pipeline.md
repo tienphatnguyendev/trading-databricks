@@ -187,18 +187,25 @@ These tasks produce the **data foundation** (`bronze.raw_aggtrades_backfill` →
 ---
 
 ## Section 10: Training Pipeline — TRD-48 (Wave 3, Agent F)
-- **Status:** not_started
-- **Branch:** —
+- **Status:** done
+- **Branch:** feat/TRD-60-ml-robustness-8-pipeline-assembly (PR #32)
 - **Modified files:**
-  - `src/trading_databricks/ml/training/primary.py` (NEW)
-  - `src/trading_databricks/ml/training/meta_label.py` (NEW)
-  - `tests/ml/test_training_primary.py` (NEW)
-  - `tests/ml/test_training_meta_label.py` (NEW)
+  - `src/trading_databricks/ml/transformers/pipeline.py` (NEW)
+  - `src/trading_databricks/ml/transformers/search.py` (NEW)
+  - `src/trading_databricks/ml/transformers/mlflow_model.py` (NEW)
+  - `src/trading_databricks/ml/jobs/train.py` (NEW)
+  - `tests/ml/test_pipeline_builder.py` (NEW)
+  - `tests/ml/test_search.py` (NEW)
+  - `tests/ml/test_mlflow_model.py` (NEW)
+  - `tests/ml/test_train_job.py` (NEW)
+  - `tests/ml/test_leakage.py` (NEW)
 - **Exports (public APIs):**
-  - `train_primary_model(training_data, *, config, cpcv_config, catalog) -> str`
-  - `train_meta_label_model(primary_oos_predictions, features, *, config, cpcv_config, catalog) -> str`
+  - `build_training_pipeline(config, bars, events, labels)`
+  - `build_hyperparameter_search(pipeline, splitter, config, param_distributions)`
+  - `TradingPipelineModel` (MLflow PyFunc PythonModel)
+  - `run_training_job(config)`
 - **Needs from others:** All exports from Sections 5–9. MLflow + UC Model Registry access.
-- **Notes:** mlflow.sklearn.autolog(), RandomizedSearchCV with CPCVSplitter. Register in UC, set Champion alias on promotion. Polars → pandas only at sklearn .fit() boundary.
+- **Notes:** Assembled the sklearn `Pipeline` mapping Polars to Numpy. Implemented `RandomizedSearchCV` with `CPCVSplitter`. Ensured strict future-bar leakage protection during cross-validation. Wrapped the final pipeline in a custom `mlflow.pyfunc.PythonModel` that automatically calculates bet sizes on inference. Finally, built the entry point (`run_training_job`) that runs the full CUSUM -> Labeling -> SearchCV -> MLflow logging flow, registering to Unity Catalog (`databricks-uc`).
 
 ---
 
