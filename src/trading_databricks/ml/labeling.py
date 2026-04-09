@@ -91,18 +91,24 @@ def compute_triple_barrier_labels(
 
         upper = float(event["upper_level"])
         lower = float(event["lower_level"])
-        
+
         if upper <= lower:
-            logger.warning("Skipping event %s: degenerate barriers (upper=%.6f <= lower=%.6f)",
-                            event["event_id"], upper, lower)
+            logger.warning(
+                "Skipping event %s: degenerate barriers (upper=%.6f <= lower=%.6f)",
+                event["event_id"],
+                upper,
+                lower,
+            )
             continue
-            
+
         entry_close = float(event["close"])
-        
+
         if entry_close <= 0.0:
-            logger.warning("Skipping event %s: entry_close=%.6f <= 0", event["event_id"], entry_close)
+            logger.warning(
+                "Skipping event %s: entry_close=%.6f <= 0", event["event_id"], entry_close
+            )
             continue
-            
+
         event_bar_index = int(event["bar_index"])
         label: int = 0
         barrier_hit: str = "vertical"
@@ -152,7 +158,7 @@ def compute_triple_barrier_labels(
         labeled.append(
             {
                 "_bar_index": event_bar_index,
-            "_exit_bar": exit_bar,   # temp column for uniqueness
+                "_exit_bar": exit_bar,  # temp column for uniqueness
                 "event_id": event["event_id"],
                 "symbol": event["symbol"],
                 "event_ts": event["event_ts"],
@@ -175,7 +181,10 @@ def compute_triple_barrier_labels(
     labeled = _fill_avg_uniqueness(labeled)
 
     return pl.DataFrame(
-        [{k: v for k, v in row.items() if k not in ("_bar_index", "_exit_bar")} for row in labeled],
+        [
+            {k: v for k, v in row.items() if k not in ("_bar_index", "_exit_bar")}
+            for row in labeled
+        ],
         schema=_LABELS_SCHEMA,
     )
 
