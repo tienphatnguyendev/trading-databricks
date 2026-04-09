@@ -92,6 +92,11 @@ def compute_triple_barrier_labels(
         upper = float(event["upper_level"])
         lower = float(event["lower_level"])
         entry_close = float(event["close"])
+        
+        if entry_close <= 0.0:
+            logger.warning("Skipping event %s: entry_close=%.6f <= 0", event["event_id"], entry_close)
+            continue
+            
         event_bar_index = int(event["bar_index"])
         label: int = 0
         barrier_hit: str = "vertical"
