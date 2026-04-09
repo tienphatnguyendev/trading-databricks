@@ -24,6 +24,7 @@ class PolarsToNumpy(PolarsTransformerMixin):
         self.output_features_ = [c for c in df.columns if c not in self._METADATA_COLS]
         return self
 
+    # intentional override: this is the Polars→NumPy exit point
     def _transform_polars(self, df: pl.DataFrame) -> np.ndarray:  # type: ignore[override]
         if not hasattr(self, "output_features_"):
             raise ValueError("Estimator not fitted yet.")

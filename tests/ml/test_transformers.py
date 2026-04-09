@@ -222,3 +222,12 @@ def test_numpy_bridge() -> None:
     assert result.shape == (1, 2)
     assert result[0, 0] == 1.0
     assert result[0, 1] == 2.0
+
+
+def test_numpy_bridge_not_fitted() -> None:
+    from trading_databricks.ml.transformers.numpy_bridge import PolarsToNumpy
+
+    bridge = PolarsToNumpy()
+    df = pl.DataFrame({"tech_feat": [1.0]})
+    with pytest.raises(ValueError, match="Estimator not fitted yet."):
+        bridge.transform(df)
