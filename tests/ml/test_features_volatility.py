@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import polars as pl
 
@@ -89,3 +89,30 @@ def test_vol_ratio_gt_one_when_recent_more_volatile() -> None:
     ratio = result["vol_ratio_20_50"][0]
     if ratio is not None:
         assert ratio > 1.0
+
+def test_garman_klass_negative_variance_handling():
+    """Verify that Garman-Klass does not yield NaN when close-to-open variance is disproportionately large."""
+    # Create 20 bars with small high/low ranges but huge close/open jumps
+    bars = pl.DataFrame({
+        "bar_index": list(range(20)),
+        "open": [100.0] * 20,
+        "high": [101.0] * 20,
+        "low": [99.0] * 20,
+        "close": [110.0] * 20,
+    }).lazy()
+
+    events = pl.DataFrame({
+        "event_id": ["e1"],
+        "symbol": ["BTC"],
+        "event_ts": [datetime(2024, 1, 1, tzinfo=UTC)],
+        "bar_index": [19],
+        "avg_bars_per_day": [24.0]
+    }).lazy()
+
+    result = compute_volatility(events, bars).collect()
+    
+    # Before the fix, garman_klass_20 would be NaN
+    gk = result["garman_klass_20"][0]
+    assert gk is not None
+    assert not pl.Series([gk]).is_nan()[0]
+    assert gk >= 0.0

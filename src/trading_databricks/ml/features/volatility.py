@@ -56,6 +56,7 @@ def compute_volatility(
             - pl.col("_log_co_sq").mul(2 * ln2 - 1)
         )
         .rolling_mean(20)
+        .clip(lower_bound=0.0)
         .sqrt()
         .alias("garman_klass_20"),
     ).with_columns(
