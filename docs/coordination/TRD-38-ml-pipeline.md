@@ -11,6 +11,38 @@
 
 ---
 
+## 🎯 Responsibility Split
+
+### Data Engineering Tasks (DE Teammate)
+**Owner:** anhvipham0904@gmail.com
+
+- **TRD-40**: Data backfill — download 6mo BTCUSDT from Binance Vision to UC Volume
+- **TRD-41**: Silver ticks_cleaned — cast types, dedup, compute dollar_value
+- **TRD-42**: Dollar bar construction — stateful accumulation from ticks_cleaned
+
+These tasks produce the **data foundation** (`bronze.raw_aggtrades_backfill` → `silver.ticks_cleaned` → `gold.dollar_bars`). Once `gold.dollar_bars` is populated, ML pipeline can run.
+
+### Machine Learning Tasks (ML Engineer)
+**Owner:** Phat Nguyen (Claude assisted)
+
+**Wave 2 (Parallel):**
+- **TRD-43**: CUSUM event detection (pure Polars)
+- **TRD-44**: Triple-barrier labeling (pure Polars)
+- **TRD-45**: Feature engineering (pure Polars)
+- **TRD-46**: CPCV + sample weights + promotion gates (pure Python/numpy)
+- **TRD-47**: Bet sizing + position compute (pure Polars)
+
+**Wave 3 (Sequential after Wave 2):**
+- **TRD-48**: Primary + meta-label training (MLflow + UC Registry)
+- **TRD-49**: Inference pipeline (Lakeflow Jobs)
+
+**Wave 4 (Final integration):**
+- **TRD-50**: Backfill orchestration (end-to-end validation)
+
+**Dependencies:** ML tasks depend on `gold.dollar_bars` existing (Wave 2 DE work), but individual ML components are **testable with synthetic data** before DE work completes.
+
+---
+
 ## Section 1: Schema & Config — TRD-39 (Wave 1)
 - **Status:** done
 - **Branch:** feat/TRD-39-ml-schema-config-dataclasses
