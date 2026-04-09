@@ -1,6 +1,13 @@
 from pyspark.sql.types import (
-    StructType, StructField, StringType, TimestampType, DoubleType, 
-    LongType, IntegerType, DateType, BooleanType
+    BooleanType,
+    DateType,
+    DoubleType,
+    IntegerType,
+    LongType,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
 )
 
 CUSUM_EVENTS_SCHEMA = StructType([
@@ -84,7 +91,16 @@ _news_fields = [
     StructField("event_ts", TimestampType(), False),
     StructField("computed_at", TimestampType(), False),
 ]
-for l1 in ["Sentiment", "DeFi", "Supply", "Exchange", "Macro", "Adoption", "Security", "Regulation"]:
+for l1 in (
+    "Sentiment",
+    "DeFi",
+    "Supply",
+    "Exchange",
+    "Macro",
+    "Adoption",
+    "Security",
+    "Regulation",
+):
     _news_fields.extend([
         StructField(f"news_count_{l1}", IntegerType(), True),
         StructField(f"news_max_conf_{l1}", DoubleType(), True),
@@ -126,7 +142,11 @@ TRAINING_DATASET_SCHEMA = StructType([
     StructField("obv_slope_20", DoubleType(), True),
     StructField("dollar_volume_ratio", DoubleType(), True),
     # ... (News 35)
-    *[_f for _f in _news_fields if _f.name not in ("event_id", "symbol", "event_ts", "computed_at")],
+    *[
+        _f
+        for _f in _news_fields
+        if _f.name not in ("event_id", "symbol", "event_ts", "computed_at")
+    ],
     StructField("created_at", TimestampType(), False),
 ])
 
