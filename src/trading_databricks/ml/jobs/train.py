@@ -65,7 +65,7 @@ def run_training_job(config: MLPipelineConfig | None = None) -> dict:
 
     with mlflow.start_run():
         logger.info("Starting hyperparameter search...")
-        search.fit(events, y, classifier__sample_weight=weights)
+        search.fit(events, y, classifier__sample_weight=weights, features__bars=bars)
 
         # Serialize pipeline and config to pass as artifacts
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -79,6 +79,19 @@ def run_training_job(config: MLPipelineConfig | None = None) -> dict:
 
             model = TradingPipelineModel()
 
+
+            from mlflow.models.signature import infer_signature
+
+            # Infer signature using a small slice to prevent large metadata
+            sample_input = events.head(5).to_pandas()
+            # Predict requires a context, but TradingPipelineModel wrapper logic is resilient if None
+            # or we can just mock it for the signature.
+            # Wait, `model.predict` needs context=None, model_input=sample_input
+            model.pipeline = search.best_estimator_
+            model.config = config
+            sample_output = model.predict(context=None, model_input=sample_input)
+            signature = infer_signature(sample_input, sample_output)
+
             mlflow.pyfunc.log_model(
                 artifact_path="model",
                 python_model=model,
@@ -86,7 +99,8 @@ def run_training_job(config: MLPipelineConfig | None = None) -> dict:
                     "pipeline": pipeline_path,
                     "config": config_path
                 },
-                registered_model_name=f"{config.catalog}.ml.trading_model"
+                registered_model_name=f"{config.catalog}.ml.trading_model",
+                signature=signature
             )
 
         mlflow.log_params(search.best_params_)
