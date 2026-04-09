@@ -36,3 +36,9 @@ def test_notebook_has_extractor_section():
     assert "Section 4: LLM Causality Extractor (Autopsy)" in content
     assert "causality_extractor" in content
     assert "build_system_prompt" in content
+
+def test_notebook_has_validator_section():
+    content = Path("src/trading_databricks/notebooks/mas_interactive_qa.py").read_text()
+    assert "Section 5: Mechanism Validator (Constraints Debugging)" in content
+    assert "validate_extraction" in content
+    assert "_validate_evidence_spans" in content

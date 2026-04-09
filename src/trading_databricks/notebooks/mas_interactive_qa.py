@@ -16,16 +16,20 @@ from pyspark.sql import SparkSession
 
 # Fallback for local testing (Databricks injects spark/dbutils)
 try:
-    dbutils.widgets.text("limit", "10", "Number of articles to sample") # type: ignore
-    dbutils.widgets.text("l1_category", "All", "Filter by L1 Category") # type: ignore
+    dbutils.widgets.text("limit", "10", "Number of articles to sample")  # type: ignore
+    dbutils.widgets.text("l1_category", "All", "Filter by L1 Category")  # type: ignore
 except NameError:
+
     class MockWidgets:
         def text(self, *args: object, **kwargs: object) -> None:
             pass
+
         def get(self, key: str) -> str:
             return "10" if key == "limit" else "All"
+
     class MockDbutils:
         widgets = MockWidgets()
+
     dbutils = MockDbutils()
     spark = SparkSession.builder.getOrCreate()
 
@@ -40,12 +44,14 @@ pdf = df.toPandas()
 # Convert to list of MASState dicts for easier manual feeding to nodes
 states = []
 for _, row in pdf.iterrows():
-    states.append({
-        "headline": row.get("headline", ""),
-        "body": row.get("body", ""),
-        "published_at": str(row.get("published_at", "")),
-        "story_id": row.get("story_id", "")
-    })
+    states.append(
+        {
+            "headline": row.get("headline", ""),
+            "body": row.get("body", ""),
+            "published_at": str(row.get("published_at", "")),
+            "story_id": row.get("story_id", ""),
+        }
+    )
 print(f"Loaded {len(states)} articles.")
 
 # COMMAND ----------
@@ -71,18 +77,20 @@ for state in states:
     )
 
     # Deep dive into exact entities
-    text = state["headline"] + " " + state["body"][:gk_config.text_window]
+    text = state["headline"] + " " + state["body"][: gk_config.text_window]
     doc = nlp(text)
     features = extract_ner_features(doc)
     extracted_entities = [(ent.text, ent.label_) for ent in doc.ents]
 
-    gatekeeper_results.append({
-        "story_id": state.get("story_id"),
-        "headline": state["headline"],
-        "is_impactful": is_impactful,
-        "extracted_entities": extracted_entities,
-        **features
-    })
+    gatekeeper_results.append(
+        {
+            "story_id": state.get("story_id"),
+            "headline": state["headline"],
+            "is_impactful": is_impactful,
+            "extracted_entities": extracted_entities,
+            **features,
+        }
+    )
 
 gk_df = pd.DataFrame(gatekeeper_results)
 print("Gatekeeper Breakdown:")
@@ -121,11 +129,13 @@ try:
         examples = retrieved_state.get("few_shot_examples", [])
         top_sim = examples[0].get("similarity_score", 0.0) if examples else 0.0
 
-        routing_results.append({
-            "headline": state["headline"],
-            "top_similarity": top_sim,
-            "extraction_path": routed_state.get("extraction_path")
-        })
+        routing_results.append(
+            {
+                "headline": state["headline"],
+                "top_similarity": top_sim,
+                "extraction_path": routed_state.get("extraction_path"),
+            }
+        )
 
     routing_df = pd.DataFrame(routing_results)
     display(routing_df)  # type: ignore  # noqa: F821
@@ -168,7 +178,7 @@ try:
     # Sandbox: Manually set a state to 'careful' path to observe majority voting
     sandbox_state = states[0].copy()
     sandbox_state["extraction_path"] = "careful"
-    sandbox_state["few_shot_examples"] = [] # Empty for cold-start test
+    sandbox_state["few_shot_examples"] = []  # Empty for cold-start test
 
     print(f"Testing extraction for headline: {sandbox_state['headline']}")
 
@@ -192,3 +202,62 @@ try:
 
 except Exception as e:
     print(f"Skipping Extractor execution (requires active MLflow deployments): {e}")
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## Section 5: Mechanism Validator (Constraints Debugging)
+# MAGIC Debug evidence span substring matching and semantic relevance scoring (Module B).
+
+# COMMAND ----------
+from trading_databricks.agents.nodes.mechanism_validator import (  # noqa: E402
+    _validate_evidence_spans,
+    validate_extraction,
+)
+
+
+# Create a mock embedding function for sandbox testing
+def mock_embed_fn(text: str) -> list[float]:
+    import numpy as np
+
+    return list(np.random.rand(1024))
+
+
+try:
+    # Sandbox: Create a problematic extraction missing exact evidence
+    mock_extraction = {
+        "treatment_class": "Macro.rate_decision",
+        "mechanism": "liquidity_contraction",
+        "expected_direction": "bearish",
+        "trigger_event": "Fed raises rates",
+        # Intentionally paraphrased:
+        "evidence_spans": ["The Fed raised rates by 50 basis points"],
+    }
+
+    body = "The Federal Reserve increased interest rates by 50 basis points today."
+
+    print(f"Evidence Spans: {mock_extraction['evidence_spans']}")
+    print(f"Article Body: {body}")
+
+    # Test strict substring matching
+    passed = _validate_evidence_spans(mock_extraction["evidence_spans"], body)  # type: ignore
+    print(f"\nStrict Substring Match Passed: {passed}")
+    if not passed:
+        print(
+            "Data Scientist Action: The LLM paraphrased the evidence. "
+            "Need to adjust the system prompt to enforce 'VERBATIM' copying."
+        )
+
+    # Run full validator
+    validation_result = validate_extraction(
+        extraction=mock_extraction,  # type: ignore
+        article_body=body,
+        whitelist=whitelist,  # from section 4
+        config=MASConfig().validator,
+        embed_fn=mock_embed_fn,
+    )
+
+    print("\nValidation Result:")
+    print(pd.Series(validation_result))
+
+except Exception as e:
+    print(f"Skipping Validator execution: {e}")
