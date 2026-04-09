@@ -42,9 +42,7 @@ def build_training_pipeline(
     t_end = labels["vertical_bar"].to_numpy()
     
     splitter = CPCVSplitter(
-        n_groups=config.cpcv.n_groups,
-        k_test=config.cpcv.k_test,
-        embargo_pct=config.cpcv.embargo_pct,
+        config=config.cpcv,
         t_start=t_start,
         t_end=t_end
     )
