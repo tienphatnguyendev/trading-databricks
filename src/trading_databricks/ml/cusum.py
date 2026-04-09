@@ -92,7 +92,11 @@ def detect_cusum_events(
 
     # --- Step 1: Vectorized log returns ---
     bars = bars.with_columns(
-        pl.col("close").log().diff().alias("log_return"),
+        pl.when(pl.col("close") > 0)
+        .then(pl.col("close").log())
+        .otherwise(None)
+        .diff()
+        .alias("log_return"),
     )
 
     # --- Step 2: EWMA volatility (vectorized) ---

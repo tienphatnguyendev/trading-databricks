@@ -220,3 +220,18 @@ def test_sigma_probability_guard_for_zero_vol() -> None:
     bars = _make_bars(closes, hours_per_bar=3.0)
     result = detect_cusum_events(bars)
     assert result.is_empty()
+
+def test_close_zero_does_not_corrupt_pipeline() -> None:
+    """A single close=0 bar must not produce NaN in any output column."""
+    closes = [100.0] * 200
+    bars = _make_bars(closes, hours_per_bar=4.5)
+    # Inject a zero close
+    bars = bars.with_columns(
+        pl.when(pl.col("bar_index") == 50)
+        .then(pl.lit(0.0))
+        .otherwise(pl.col("close"))
+        .alias("close")
+    )
+    result = detect_cusum_events(bars)
+    # Should either skip the bad bar or return empty, not produce NaN in the output
+    assert result.select(pl.col(pl.Float64).is_nan().any()).sum_horizontal().item() == 0
