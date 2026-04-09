@@ -21,6 +21,16 @@ class PolarsFeatureUnion(PolarsTransformerMixin):
         y: object = None,
         **fit_params: object,
     ) -> PolarsFeatureUnion:
+        bars = fit_params.get("bars")
+        
+        # Leakage protection: do not let transformers see bars that occur after
+        # the latest event_ts in the training fold.
+        if bars is not None and isinstance(bars, pl.DataFrame) and "event_ts" in df.columns:
+            max_train_ts = df["event_ts"].max()
+            if max_train_ts is not None:
+                bars = bars.filter(pl.col("bar_end_time") <= max_train_ts)
+            fit_params["bars"] = bars
+            
         for _name, t in self.transformers:
             t.fit(df, y, **fit_params)
         return self
