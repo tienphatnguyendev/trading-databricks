@@ -90,3 +90,28 @@ def test_backtest_paths_cover_all_groups() -> None:
                 assert g not in covered, f"Group {g} covered twice in path {path}"
                 covered.add(g)
         assert covered == set(range(6)), f"Path {path} doesn't cover all 6 groups"
+
+def test_embargo_applies_after_each_test_segment() -> None:
+    """Non-contiguous test groups must have embargo after EACH segment."""
+    n = 120
+    t_start = np.arange(n)
+    t_end = np.arange(n) + 5
+    config = CPCVConfig(n_groups=6, k_test=2, embargo_pct=0.01)
+    splitter = CPCVSplitter(config, t_start=t_start, t_end=t_end)
+
+    for train_idx, test_idx in splitter.split(np.zeros((n, 1))):
+        sorted_test = np.sort(test_idx)
+        gaps = np.where(np.diff(sorted_test) > 1)[0]
+        if len(gaps) > 0:
+            first_seg_end = sorted_test[gaps[0]]
+            embargo_size = max(1, int(0.01 * n))
+            for embargo_idx in range(
+                first_seg_end + 1, first_seg_end + 1 + embargo_size
+            ):
+                assert embargo_idx not in train_idx, (
+                    f"Sample {embargo_idx} should be embargoed "
+                    f"(after first test segment ending at {first_seg_end})"
+                )
+            return
+
+    pytest.fail("No non-contiguous test groups found in any split")

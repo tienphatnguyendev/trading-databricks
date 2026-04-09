@@ -165,3 +165,19 @@ def test_psr_with_single_observation() -> None:
     returns = np.array([0.05])
     assert compute_psr(0.1, returns, benchmark_sharpe=0.0) == 1.0
     assert compute_psr(-0.1, returns, benchmark_sharpe=0.0) == 0.0
+
+
+def test_psr_normal_returns_matches_analytical() -> None:
+    """For normal IID returns, PSR should be near 1 for SR≈1 and near 0.5 for SR=0."""
+    rng = np.random.default_rng(42)
+    returns = rng.normal(0.001, 0.01, 1000)
+    sr = float(np.mean(returns) / np.std(returns, ddof=1))
+
+    psr = compute_psr(sr, returns, benchmark_sharpe=0.0)
+    # For 1000 observations with SR~1, PSR should be very high
+    assert psr > 0.95
+
+    # PSR(SR=0 | benchmark=0) should be ~0.5 (symmetric distribution)
+    zero_sr_returns = rng.normal(0.0, 0.01, 100)
+    psr_zero = compute_psr(0.0, zero_sr_returns, benchmark_sharpe=0.0)
+    assert 0.3 < psr_zero < 0.7
