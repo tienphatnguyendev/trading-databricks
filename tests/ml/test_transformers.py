@@ -115,3 +115,24 @@ def test_label_transformer_missing_bars() -> None:
     labeler = TripleBarrierLabeler()
     with pytest.raises(ValueError, match="requires 'bars' passed to fit"):
         labeler.fit(events)
+
+def test_feature_transformers() -> None:
+    from trading_databricks.ml.transformers.feature_transformers import (
+        TechnicalFeatureTransformer, VolatilityFeatureTransformer,
+        VolumeFeatureTransformer, NewsFeatureTransformer
+    )
+    events = pl.DataFrame({"event_id": ["e1"], "symbol": ["BTCUSDT"], "event_ts": [datetime(2026, 1, 1)], "bar_index": [1], "avg_bars_per_day": [10.0]})
+    bars = pl.DataFrame({"bar_index": [1, 2], "symbol": ["BTCUSDT", "BTCUSDT"], "open": [98.0, 108.0], "close": [100.0, 110.0], "bar_end_time": [datetime(2026, 1, 1), datetime(2026, 1, 2)], "high": [105.0, 115.0], "low": [95.0, 105.0], "volume": [1.0, 2.0], "dollar_volume": [100.0, 220.0]})
+    news_features = pl.DataFrame({"symbol": ["BTCUSDT"], "published_at": [datetime(2026, 1, 1)], "sentiment_score": [0.5], "is_impactful": [True]})
+    
+    t1 = TechnicalFeatureTransformer()
+    assert "rsi_14" in t1.fit(events, bars=bars).transform(events).columns
+    
+    t2 = VolatilityFeatureTransformer()
+    assert "realized_vol_20" in t2.fit(events, bars=bars).transform(events).columns
+    
+    t3 = VolumeFeatureTransformer()
+    assert "relative_volume_20" in t3.fit(events, bars=bars).transform(events).columns
+
+    t4 = NewsFeatureTransformer()
+    assert "news_sentiment_score" in t4.fit(events, news_features=None).transform(events).columns
