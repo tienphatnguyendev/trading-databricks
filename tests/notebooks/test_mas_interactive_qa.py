@@ -24,3 +24,9 @@ def test_notebook_has_gatekeeper_section():
     assert "Section 2: Gatekeeper (Stage 1) Deep Dive" in content
     assert "is_crypto_relevant" in content
     assert "extract_ner_features" in content
+
+def test_notebook_has_routing_section():
+    content = Path("src/trading_databricks/notebooks/mas_interactive_qa.py").read_text()
+    assert "Section 3: RAG & Routing Inspection" in content
+    assert "few_shot_retriever" in content
+    assert "uncertainty_router" in content

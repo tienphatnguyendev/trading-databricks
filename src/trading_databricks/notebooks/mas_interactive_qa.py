@@ -91,3 +91,63 @@ print(gk_df["is_impactful"].value_counts())
 # Show false negatives (if you know the dataset contains crypto articles)
 print("\nSample articles dropped by Gatekeeper (is_impactful=False):")
 display(gk_df[gk_df["is_impactful"] == False].head(5))  # type: ignore  # noqa: F821, E712
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC ## Section 3: RAG & Routing Inspection
+# MAGIC Evaluate Vector Search similarity scores to tune routing thresholds.
+
+# COMMAND ----------
+import matplotlib.pyplot as plt  # noqa: E402
+
+from trading_databricks.agents.config import MASConfig  # noqa: E402
+from trading_databricks.agents.nodes.few_shot_retriever import (  # noqa: E402
+    few_shot_retriever,
+)
+from trading_databricks.agents.nodes.uncertainty_router import (  # noqa: E402
+    uncertainty_router,
+)
+
+# We wrap this in try-except because it requires active VS/Spark connection
+try:
+    routing_results = []
+    for state in states[:5]:  # Limit to 5 for fast sandbox iteration
+        # Run Few Shot Retriever
+        retrieved_state = few_shot_retriever(state.copy(), config=MASConfig())
+
+        # Run Uncertainty Router
+        routed_state = uncertainty_router(retrieved_state, config=MASConfig())
+
+        examples = retrieved_state.get("few_shot_examples", [])
+        top_sim = examples[0].get("similarity_score", 0.0) if examples else 0.0
+
+        routing_results.append({
+            "headline": state["headline"],
+            "top_similarity": top_sim,
+            "extraction_path": routed_state.get("extraction_path")
+        })
+
+    routing_df = pd.DataFrame(routing_results)
+    display(routing_df)  # type: ignore  # noqa: F821
+
+    # Plot histogram if enough data
+    if len(routing_df) > 1:
+        routing_df["top_similarity"].plot(
+            kind="hist", bins=20, title="Top Similarity Score Distribution"
+        )
+        plt.axvline(
+            x=MASConfig().router.high_similarity_threshold,
+            color="g",
+            linestyle="--",
+            label="Fast Threshold",
+        )
+        plt.axvline(
+            x=MASConfig().router.low_similarity_threshold,
+            color="r",
+            linestyle="--",
+            label="Careful Threshold",
+        )
+        plt.legend()
+        plt.show()
+except Exception as e:
+    print(f"Skipping RAG execution (requires active VS/Spark): {e}")
