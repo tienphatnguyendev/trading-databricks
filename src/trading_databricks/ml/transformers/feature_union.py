@@ -26,10 +26,23 @@ class PolarsFeatureUnion(PolarsTransformerMixin):
         return self
 
     def _transform_polars(self, df: pl.DataFrame) -> pl.DataFrame:
+        if "event_id" not in df.columns:
+            raise ValueError(
+                "PolarsFeatureUnion requires 'event_id' in the input DataFrame."
+            )
         result = df.clone()
         existing_cols: set[str] = set(result.columns)
         for _name, t in self.transformers:
             features = t.transform(df)
+            if "event_id" not in features.columns:
+                raise ValueError(
+                    f"Transformer '{_name}' must return a DataFrame with 'event_id'."
+                )
+            if features["event_id"].n_unique() != len(features):
+                raise ValueError(
+                    f"Transformer '{_name}' returned duplicate event_id values; "
+                    "PolarsFeatureUnion requires one row per event_id."
+                )
             # Only join new columns (avoid duplicating event_id, symbol, event_ts, etc.)
             new_cols = [
                 c for c in features.columns
