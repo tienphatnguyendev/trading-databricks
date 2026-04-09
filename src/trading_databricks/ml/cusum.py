@@ -117,12 +117,9 @@ def detect_cusum_events(
     # initial estimate: 2250 bars for 30 days
 
     # Calculate seconds since min_ts and convert to days, ensuring minimum of 1.0
-    days_since_start_expr = (
-        (pl.col("bar_end_time") - pl.lit(min_ts))
-        .cast(pl.Duration)
-        .dt.total_seconds()
-        / 86400.0
-    )
+    days_since_start_expr = (pl.col("bar_end_time") - pl.lit(min_ts)).cast(
+        pl.Duration
+    ).dt.total_seconds() / 86400.0
     bars = bars.with_columns(
         pl.when(days_since_start_expr < 1.0)
         .then(1.0)
