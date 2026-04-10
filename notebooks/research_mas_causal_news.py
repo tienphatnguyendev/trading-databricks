@@ -45,17 +45,16 @@ def load_eval_dataset(limit: int = 5) -> pd.DataFrame:
 def gatekeeper_node(state: NewsAgentState) -> NewsAgentState:
     """Classifies if the article is financially relevant using ai_classify."""
     print(f"Running Gatekeeper for article {state['article_id']}...")
-    text = state['article_text'].replace("'", "''") # Escape single quotes
     
-    # Using ai_classify via Spark SQL
-    query = f"""
+    # Using parameterized Spark SQL to prevent injection
+    query = """
     SELECT ai_classify(
-        '{text}',
+        :text,
         ARRAY('Financially Relevant', 'Not Financially Relevant')
     ) as relevance
     """
     try:
-        df = spark.sql(query)
+        df = spark.sql(query, args={"text": state['article_text']})
         result = df.collect()[0]['relevance']
         state['is_relevant'] = (result == 'Financially Relevant')
     except Exception as e:
@@ -75,19 +74,17 @@ def context_retriever_node(state: NewsAgentState) -> NewsAgentState:
 def extractor_node(state: NewsAgentState) -> NewsAgentState:
     """Extracts causal events using ai_query."""
     print(f"Running Extractor for article {state['article_id']}...")
-    text = state['article_text'].replace("'", "''")
-    prompt = f"Extract causal financial events from this text. Return a JSON array of objects with 'cause' and 'effect' keys. Text: {text}"
-    prompt = prompt.replace("'", "''")
+    prompt = f"Extract causal financial events from this text. Return a JSON array of objects with 'cause' and 'effect' keys. Text: {state['article_text']}"
     
-    # Using ai_query with a standard model (e.g., databricks-meta-llama-3-1-70b-instruct)
-    query = f"""
+    # Using parameterized ai_query with a standard model
+    query = """
     SELECT ai_query(
         'databricks-meta-llama-3-1-70b-instruct',
-        '{prompt}'
+        :prompt
     ) as extracted
     """
     try:
-        df = spark.sql(query)
+        df = spark.sql(query, args={"prompt": prompt})
         result_str = df.collect()[0]['extracted']
         # Try to parse JSON out of the response
         try:
