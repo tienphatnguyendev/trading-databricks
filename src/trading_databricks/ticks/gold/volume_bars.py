@@ -9,6 +9,7 @@ from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 
 from trading_databricks.common.config import VolumeBarConfig
+from trading_databricks.ticks.schemas import BAR_SCHEMA
 
 
 def build_volume_bars(ticks_df: DataFrame, *, config: VolumeBarConfig) -> DataFrame:
@@ -55,5 +56,4 @@ def build_volume_bars(ticks_df: DataFrame, *, config: VolumeBarConfig) -> DataFr
         )
     )
 
-    from trading_databricks.ticks.schemas import BAR_SCHEMA
     return bars_df.select(*BAR_SCHEMA.names)

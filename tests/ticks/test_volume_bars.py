@@ -41,15 +41,15 @@ def test_build_volume_bars_functional(spark):
     ]
     ticks_df = spark.createDataFrame(data)
 
-    # 2. Build volume bars with threshold 5.0
-    # BTC: [4.0, 2.0] -> [Bar 0 (vol 4), Bar 1 (vol 2)]; [5.0] -> Bar 2 (vol 5)
-    # Actually:
-    # cum_vol - qty:
-    # 1. 0.0 / 5.0 -> Bar 0
-    # 2. 4.0 / 5.0 -> Bar 0
-    # 3. 6.0 / 5.0 -> Bar 1
-    # ETH:
-    # 1. 0.0 / 5.0 -> Bar 0
+    # 2. Build volume bars with threshold 5.0.
+    # BTC ticks: qty [4.0, 2.0, 5.0].
+    # Tick 1: qty 4.0. Cum volume before tick: 0.0. Bar index: 0.
+    # Tick 2: qty 2.0. Cum volume before tick: 4.0. Bar index: 0.
+    # Tick 3: qty 5.0. Cum volume before tick: 6.0. Bar index: 1.
+    # Result: BTC has 2 bars. Bar 0 (vol 6.0, ticks 1-2), Bar 1 (vol 5.0, tick 3).
+    # ETH ticks: qty [8.0].
+    # Tick 4: qty 8.0. Cum volume before tick: 0.0. Bar index: 0.
+    # Result: ETH has 1 bar. Bar 0 (vol 8.0, tick 4).
     config = VolumeBarConfig(threshold=5.0)
     bars_df = build_volume_bars(ticks_df, config=config)
     results = bars_df.collect()

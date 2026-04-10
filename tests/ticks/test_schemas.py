@@ -15,12 +15,15 @@ def test_bar_schema_has_ohlcv_fields():
         "symbol",
         "exchange",
         "bar_index",
+        "bar_start_time",
+        "bar_end_time",
         "open",
         "high",
         "low",
         "close",
         "volume",
         "dollar_volume",
+        "tick_count",
     }.issubset(field_names)
 
 
