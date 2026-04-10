@@ -323,6 +323,124 @@ def build_heatmap(features: pl.DataFrame, corr: bool = True) -> go.Figure:
         pdf = pdf.corr()
     return px.imshow(pdf)
 
+def build_triple_barrier_chart(events: pl.DataFrame, labels: pl.DataFrame, bars: pl.DataFrame, n_samples: int = 5) -> go.Figure:
+    """Build a visualization showing price trajectories and triple barrier bounds for a sample of events."""
+    # Ensure data is loaded
+    events_df = events.collect() if isinstance(events, pl.LazyFrame) else events
+    labels_df = labels.collect() if isinstance(labels, pl.LazyFrame) else labels
+    bars_df = bars.collect() if isinstance(bars, pl.LazyFrame) else bars
+
+    # Join labels to events to get barrier levels and hit times
+    if "event_ts" in labels_df.columns:
+        labeled_events = events_df.join(labels_df, on="event_ts", how="inner")
+    else:
+        # Fallback if label index is bar_index or something else
+        labeled_events = events_df.join(labels_df, left_on="bar_index", right_on="bar_index", how="inner")
+
+    # Sample a continuous subset
+    if labeled_events.height == 0:
+        return go.Figure()
+    
+    # Take the first n_samples valid labeled events
+    sample = labeled_events.head(n_samples).to_pandas()
+    
+    # Determine the time window for the chart + 10% margin
+    min_ts = sample["event_ts"].min()
+    max_ts = sample["matured_at"].max()
+    
+    time_span = max_ts - min_ts
+    margin = time_span * 0.1 if time_span.total_seconds() > 0 else pd.Timedelta(hours=1)
+    
+    start_window = min_ts - margin
+    end_window = max_ts + margin
+
+    # Filter bars to this window
+    window_bars = bars_df.filter(
+        (pl.col("bar_end_time") >= start_window) & 
+        (pl.col("bar_end_time") <= end_window)
+    ).to_pandas()
+
+    fig = go.Figure()
+
+    # 1. Base trace: Close price
+    fig.add_trace(go.Scatter(
+        x=window_bars["bar_end_time"],
+        y=window_bars["close"],
+        mode="lines",
+        name="Close Price",
+        line=dict(color="#222222") # mc_dark_gray
+    ))
+
+    # 2. Entries (Buying points)
+    fig.add_trace(go.Scatter(
+        x=sample["event_ts"],
+        y=sample["close_bar"],
+        mode="markers",
+        name="CUSUM Event (Entry)",
+        marker=dict(color="#005eb8", size=10, symbol="triangle-up") # mc_blue
+    ))
+
+    # 3. Draw Barriers and Hit Markers for each event
+    for _, row in sample.iterrows():
+        entry_time = row["event_ts"]
+        entry_price = row["close_bar"]
+        mature_time = row["matured_at"]
+        hit_type = row["barrier_hit"] # usually 1 (upper), -1 (lower), 0 (time)
+        
+        # We need the barrier thresholds. Usually config is applied. 
+        # For visualization, we can infer upper/lower from the return if barrier_hit != 0
+        # However, to be exact we rely on the hit price. 
+        # Since we don't have the exact threshold levels in the return DF standardly,
+        # we will plot a horizontal line from entry to mature_time for the Hit price if hit.
+        
+        hit_price = window_bars.loc[window_bars["bar_end_time"] == mature_time, "close"]
+        if not hit_price.empty:
+            hit_price = hit_price.values[0]
+        else:
+            hit_price = entry_price # fallback
+            
+        # Upper/Lower/Time hit marker
+        color = "#a2aaad" # Default time barrier
+        name = "Time Barrier Hit"
+        if hit_type == 1:
+            color = "#005eb8" # Upper
+            name = "Take Profit Hit"
+        elif hit_type == -1:
+            color = "#f3c13a" # Lower
+            name = "Stop Loss Hit"
+
+        # Draw a dotted line to the hit point
+        fig.add_trace(go.Scatter(
+            x=[entry_time, mature_time],
+            y=[entry_price, hit_price],
+            mode="lines",
+            line=dict(color=color, width=1, dash="dot"),
+            showlegend=False
+        ))
+        
+        # Draw the hit marker
+        fig.add_trace(go.Scatter(
+            x=[mature_time],
+            y=[hit_price],
+            mode="markers",
+            name=name,
+            marker=dict(color=color, size=12, symbol="x"),
+            showlegend=False # We'll just rely on colors, legend gets too cluttered if repeated
+        ))
+        
+    # Add dummy traces for legend entries for the hit markers
+    fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#005eb8", size=12, symbol="x"), name="Take Profit Hit"))
+    fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#f3c13a", size=12, symbol="x"), name="Stop Loss Hit"))
+    fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#a2aaad", size=12, symbol="x"), name="Time Barrier Hit"))
+
+    fig.update_layout(
+        title="Triple Barrier Labeling Trajectories",
+        xaxis_title="Time",
+        yaxis_title="Price"
+    )
+    
+    return fig
+
 NODE_NAMES = ("context_retriever", "few_shot_retriever", "uncertainty_router", "causality_extractor", "mechanism_validator")
 
 def _raise_embed_error(text: str) -> list[float]:
