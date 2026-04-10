@@ -89,7 +89,7 @@ def test_pit_safety_no_future_bars_used() -> None:
 
 
 def test_empty_events_returns_empty_lazyframe() -> None:
-    """No events → empty LazyFrame with correct columns."""
+    """No events → empty LazyFrame with correct columns and expected schema."""
     bars = _make_bars_lf([100.0] * 50)
     events = pl.DataFrame(
         schema={
@@ -101,11 +101,20 @@ def test_empty_events_returns_empty_lazyframe() -> None:
             "avg_bars_per_day": pl.Float64,
         }
     ).lazy()
-    result = compute_technical(events, bars).collect()
-    assert result.is_empty()
-    assert "rsi_14" in result.columns
 
-def test_technical_log_zero_handling():
+    from trading_databricks.ml.features.technical import _TECHNICAL_SCHEMA
+
+    result = compute_technical(events, bars)
+
+    # Assert it returns a LazyFrame and its schema strictly matches expected
+    expected_schema = pl.DataFrame(schema=_TECHNICAL_SCHEMA).schema
+    assert result.collect_schema() == expected_schema
+
+    result_df = result.collect()
+    assert result_df.is_empty()
+    assert result_df.schema == expected_schema
+
+def test_technical_log_zero_handling() -> None:
     """Verify that log(0) does not produce NaN/inf for log returns."""
     # Create bars where close drops to 0
     bars = pl.DataFrame({
@@ -128,7 +137,7 @@ def test_technical_log_zero_handling():
     # log_return_5 should be null, not NaN or -inf
     assert result["log_return_5"][0] is None
 
-def test_technical_macd_min_periods():
+def test_technical_macd_min_periods() -> None:
     """Verify MACD is null for early bars to prevent unstable EMA signals."""
     bars = pl.DataFrame({
         "bar_index": list(range(10)),  # Only 10 bars (less than 26)
