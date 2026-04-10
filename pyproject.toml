@@ -68,3 +68,8 @@ ignore = [
 
 [tool.ruff.format]
 indent-style = "space"
+
+[dependency-groups]
+dev = [
+    "databricks-connect>=17.3.7",
+]

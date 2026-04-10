@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
+import pytest_mock
 
 from trading_databricks.ml.training.promotion import (
     compute_dsr,
@@ -73,17 +75,17 @@ def _make_good_path(n: int = 252) -> dict:
     return {
         "returns": returns,
         "sharpe": sharpe,
-        "max_drawdown": 0.05,   # 5% < 25% gate
+        "max_drawdown": 0.05,  # 5% < 25% gate
         "time_under_water": 30,  # 30 days < 90 gate
     }
 
 
 def _make_good_meta_metrics() -> dict:
     return {
-        "precision": 0.65,   # > 0.60
-        "recall": 0.55,      # > 0.50
-        "f1": 0.60,          # > 0.55
-        "logloss": 0.60,     # < 0.65
+        "precision": 0.65,  # > 0.60
+        "recall": 0.55,  # > 0.50
+        "f1": 0.60,  # > 0.55
+        "logloss": 0.60,  # < 0.65
     }
 
 
@@ -122,14 +124,24 @@ def test_meta_precision_gate_fails() -> None:
 def test_result_has_promotion_evidence_schema_keys() -> None:
     """Result dict has all required keys from PROMOTION_EVIDENCE_SCHEMA."""
     from datetime import datetime
+
     paths = [_make_good_path() for _ in range(5)]
     result = evaluate_promotion_gates(paths, _make_good_meta_metrics(), trial_count=5)
 
     required_keys = {
-        "psr", "dsr", "max_drawdown", "time_under_water",
-        "cost_robust", "strategy_failure_prob",
-        "meta_precision", "meta_recall", "meta_f1", "meta_logloss",
-        "all_gates_pass", "failure_reasons", "evaluated_at",
+        "psr",
+        "dsr",
+        "max_drawdown",
+        "time_under_water",
+        "cost_robust",
+        "strategy_failure_prob",
+        "meta_precision",
+        "meta_recall",
+        "meta_f1",
+        "meta_logloss",
+        "all_gates_pass",
+        "failure_reasons",
+        "evaluated_at",
     }
     assert required_keys.issubset(set(result.keys()))
     assert isinstance(result["evaluated_at"], datetime)
@@ -142,7 +154,9 @@ def test_dsr_with_zero_trials_equals_psr() -> None:
     sr = float(np.mean(returns) / np.std(returns, ddof=1))
     psr = compute_psr(sr, returns, benchmark_sharpe=0.0)
     dsr = compute_dsr(sr, returns, n_trials=0)
-    assert abs(psr - dsr) < 1e-9, f"PSR={psr} and DSR={dsr} should be equal for n_trials=0"
+    assert abs(psr - dsr) < 1e-9, (
+        f"PSR={psr} and DSR={dsr} should be equal for n_trials=0"
+    )
 
 
 def test_zero_returns_fails_psr_gate() -> None:
@@ -181,3 +195,117 @@ def test_psr_normal_returns_matches_analytical() -> None:
     zero_sr_returns = rng.normal(0.0, 0.01, 100)
     psr_zero = compute_psr(0.0, zero_sr_returns, benchmark_sharpe=0.0)
     assert 0.3 < psr_zero < 0.7
+
+
+def test_evaluate_promotion_gates_empty_paths() -> None:
+    """Empty cpcv_path_results should raise ValueError."""
+    import pytest
+
+    from trading_databricks.ml.training.promotion import evaluate_promotion_gates
+
+    with pytest.raises(ValueError, match="cpcv_path_results"):
+        evaluate_promotion_gates([], _make_good_meta_metrics(), trial_count=1)
+
+
+def test_evaluate_promotion_gates_zero_trials(caplog: pytest.LogCaptureFixture) -> None:
+    """trial_count < 1 should log a warning."""
+    import logging
+
+    from trading_databricks.ml.training.promotion import evaluate_promotion_gates
+
+    paths = [_make_good_path() for _ in range(5)]
+    meta = _make_good_meta_metrics()
+
+    with caplog.at_level(logging.WARNING):
+        evaluate_promotion_gates(paths, meta, trial_count=0)
+
+    assert "trial_count=0; DSR = PSR (first trial)." in caplog.text
+
+
+def test_compute_psr_tiny_variance(mocker: pytest_mock.MockerFixture) -> None:
+    """If variance is tiny, should fall back to deterministic pass/fail."""
+    from trading_databricks.ml.training.promotion import compute_psr
+
+    returns = np.zeros(10)
+
+    # We want variance_sr = 1e-22, so sigma_sr = 1e-11 < 1e-10
+    # variance_sr = (1.0 - gamma_3 * sharpe + (gamma_4 - 1.0) / 4.0 * sharpe**2) / (t - 1)
+    # (1.0 + (gamma_4 - 1.0)/4.0)/9 = 1e-22
+    # gamma_4 = -3.0 + 36e-22
+    mocker.patch("scipy.stats.skew", return_value=0.0)
+    mocker.patch("scipy.stats.kurtosis", return_value=-3.0 + 36e-22)
+
+    psr_pass = compute_psr(sharpe=1.0, returns=returns, benchmark_sharpe=0.0)
+    assert psr_pass == 1.0
+
+    psr_fail = compute_psr(sharpe=-1.0, returns=returns, benchmark_sharpe=0.0)
+    assert psr_fail == 0.0
+
+
+def test_compute_dsr_zero_or_negative_trials(caplog: pytest.LogCaptureFixture) -> None:
+    """n_trials < 1 should log a warning."""
+    import logging
+
+    from trading_databricks.ml.training.promotion import compute_dsr
+
+    rng = np.random.default_rng(99)
+    returns = rng.normal(loc=0.003, scale=0.01, size=100)
+
+    with caplog.at_level(logging.WARNING):
+        compute_dsr(sharpe=1.0, returns=returns, n_trials=0)
+
+    assert "n_trials=0 < 1; DSR = PSR with benchmark=0." in caplog.text
+
+
+def test_compute_psr_negative_variance(mocker: pytest_mock.MockerFixture) -> None:
+    """If variance_sr <= 0, should set sigma_sr to 1e-10."""
+    from trading_databricks.ml.training.promotion import compute_psr
+
+    returns = np.zeros(10)
+
+    # We want variance_sr < 0
+    mocker.patch("scipy.stats.skew", return_value=0.0)
+    mocker.patch("scipy.stats.kurtosis", return_value=-5.0)
+
+    psr_pass = compute_psr(sharpe=1.0, returns=returns, benchmark_sharpe=0.0)
+    assert psr_pass == 1.0
+
+
+def test_compute_psr_exact_tiny_sigma(mocker: pytest_mock.MockerFixture) -> None:
+    """If 0 < variance_sr < 1e-20, sigma_sr is < 1e-10."""
+    from trading_databricks.ml.training.promotion import compute_psr
+
+    returns = np.zeros(10)
+
+    # We want 0 < variance_sr < 1e-20
+    # Let variance_sr = 1e-24, so sigma_sr = 1e-12 < 1e-10
+    # variance_sr = (1 - 0 + (gamma_4 - 1)/4) / 9 = 1e-24
+    # (1 + (gamma_4 - 1)/4) = 9e-24
+    # (gamma_4 - 1)/4 = 9e-24 - 1
+    # gamma_4 - 1 = 36e-24 - 4
+    # gamma_4 = -3 + 36e-24
+    mocker.patch("scipy.stats.skew", return_value=0.0)
+    mocker.patch("scipy.stats.kurtosis", return_value=-3.0 + 36e-24)
+
+    psr_pass = compute_psr(sharpe=1.0, returns=returns, benchmark_sharpe=0.0)
+    assert psr_pass == 1.0
+
+
+def test_compute_psr_exact_tiny_sigma2(mocker: pytest_mock.MockerFixture) -> None:
+    """Test the condition where variance_sr > 0.0 but sigma_sr < 1e-10"""
+    from trading_databricks.ml.training.promotion import compute_psr
+
+    returns = np.zeros(10)
+
+    # We want variance_sr around 1e-21 which is float precision limit.
+    # a mocked function to directly mock sqrt returning < 1e-10
+
+    mocker.patch("numpy.sqrt", return_value=1e-11)
+
+    # Need variance_sr > 0.0 so we pass the first part of the ternary
+    # Example gamma_4 = -3.0 + 36e-15 -> variance ~ 1e-15.
+    mocker.patch("scipy.stats.skew", return_value=0.0)
+    mocker.patch("scipy.stats.kurtosis", return_value=-3.0 + 36e-15)
+
+    psr_pass = compute_psr(sharpe=1.0, returns=returns, benchmark_sharpe=0.0)
+    assert psr_pass == 1.0

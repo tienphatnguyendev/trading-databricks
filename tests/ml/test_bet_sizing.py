@@ -104,24 +104,20 @@ def test_discretization_tier_boundaries() -> None:
     # z=(meta-0.5)/sigma → meta = 0.5 + z*sigma
     sigma = 0.10
     tier_tests = [
-        (0.05, 0.00),   # raw<0.10 → 0.00
-        (0.18, 0.15),   # 0.10 <= raw < 0.25 → 0.15
-        (0.40, 0.35),   # 0.25 <= raw < 0.50 → 0.35
-        (0.60, 0.60),   # 0.50 <= raw < 0.75 → 0.60
-        (0.80, 0.85),   # 0.75 <= raw → 0.85
+        (0.05, 0.00),  # raw<0.10 → 0.00
+        (0.18, 0.15),  # 0.10 <= raw < 0.25 → 0.15
+        (0.40, 0.35),  # 0.25 <= raw < 0.50 → 0.35
+        (0.60, 0.60),  # 0.50 <= raw < 0.75 → 0.60
+        (0.80, 0.85),  # 0.75 <= raw → 0.85
     ]
 
     for raw_target, expected_disc in tier_tests:
         # Invert raw = 2*Phi(z)-1 to get z
         z = float(_norm.ppf((raw_target + 1.0) / 2.0))
         meta = 0.5 + z * sigma
-        meta = max(meta, 0.51)  # ensure it passes meta_threshold > 0.50
 
         preds = _make_predictions([meta], [0.60])
         result = compute_bet_sizes(preds, sigma_probability=sigma, config=config)
-
-        if result.is_empty():
-            continue  # meta barely above threshold; skip this tier
 
         disc = result["discretized_weight"][0]
         raw_got = result["raw_bet_size"][0]
@@ -131,7 +127,9 @@ def test_discretization_tier_boundaries() -> None:
         )
 
 
-def test_nan_or_null_confidence_logged_and_dropped(caplog) -> None:
+def test_nan_or_null_confidence_logged_and_dropped(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     """NaN or Null predictions should be logged as warnings and excluded."""
     preds = pl.DataFrame(
         {
@@ -154,3 +152,24 @@ def test_nan_or_null_confidence_logged_and_dropped(caplog) -> None:
     assert len(result) == 1
     assert result["signal_id"][0] == "sig-0"
     assert "Dropping 2 predictions with NaN/Null confidence values" in caplog.text
+
+
+def test_empty_predictions_returns_empty() -> None:
+    """Empty predictions should safely return empty result dataframe."""
+    preds = _make_predictions([], [])
+    result = compute_bet_sizes(preds, sigma_probability=0.10)
+    assert result.is_empty()
+    assert list(result.columns) == [
+        "signal_id",
+        "event_id",
+        "symbol",
+        "event_ts",
+        "primary_side",
+        "primary_confidence",
+        "meta_label",
+        "meta_confidence",
+        "raw_bet_size",
+        "discretized_weight",
+        "primary_model_version",
+        "meta_model_version",
+    ]
