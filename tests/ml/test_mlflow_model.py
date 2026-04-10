@@ -1,3 +1,6 @@
+import pickle
+from unittest.mock import MagicMock
+
 import pandas as pd
 
 from trading_databricks.ml.config import MLPipelineConfig
@@ -20,3 +23,28 @@ def test_mlflow_model_predict():
 
     assert "bet_size" in result.columns
     assert len(result) == 2
+
+def test_mlflow_model_load_context(tmp_path):
+    """Verify load_context correctly initializes pipeline and config."""
+    pipeline = DummyPipeline()
+    config = MLPipelineConfig()
+
+    pipe_path = tmp_path / "pipeline.pkl"
+    config_path = tmp_path / "config.pkl"
+
+    with open(pipe_path, "wb") as f:
+        pickle.dump(pipeline, f)
+    with open(config_path, "wb") as f:
+        pickle.dump(config, f)
+
+    context = MagicMock()
+    context.artifacts = {
+        "pipeline": str(pipe_path),
+        "config": str(config_path)
+    }
+
+    model = TradingPipelineModel()
+    model.load_context(context)
+
+    assert model.pipeline is not None
+    assert model.config is not None
