@@ -2,8 +2,6 @@
 
 Samples a new bar every time the cumulative quantity traded crosses a
 fixed threshold N.
-
-TODO: implement build_volume_bars() after tick-scraper-aws schema is confirmed.
 """
 from __future__ import annotations
 
