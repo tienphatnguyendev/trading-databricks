@@ -151,57 +151,63 @@ def detect_cusum_events(
     s_pos, s_neg = 0.0, 0.0
     last_event_idx = -config.min_inter_event_bars
 
-    for row in bars.iter_rows(named=True):
-        lr = row["log_return"]
+    for symbol, event_ts, bar_index, lr, ewma_vol, threshold, avg_bars in zip(
+        bars["symbol"],
+        bars["bar_end_time"],
+        bars["bar_index"],
+        bars["log_return"],
+        bars["ewma_vol"],
+        bars["threshold"],
+        bars["avg_bars_per_day"],
+        strict=True,
+    ):
         if lr is None:
             continue
-        ewma_vol = row["ewma_vol"]
         if ewma_vol is not None and ewma_vol < 1e-10:
             continue  # zero-vol guard: skip bar, don't update accumulators
 
-        threshold = row["threshold"]
         if threshold is None or (isinstance(threshold, float) and math.isnan(threshold)):
             continue
 
         s_pos = max(0.0, s_pos + lr)
         s_neg = min(0.0, s_neg + lr)
 
-        spacing_ok = (row["bar_index"] - last_event_idx) >= config.min_inter_event_bars
+        spacing_ok = (bar_index - last_event_idx) >= config.min_inter_event_bars
 
         if s_pos > threshold and spacing_ok:
             events.append(
                 {
                     "event_id": str(uuid.uuid4()),
-                    "symbol": row["symbol"],
-                    "event_ts": row["bar_end_time"],
-                    "bar_index": row["bar_index"],
+                    "symbol": symbol,
+                    "event_ts": event_ts,
+                    "bar_index": bar_index,
                     "log_return": lr,
                     "cusum_side": "up",
                     "cusum_value": s_pos,
                     "threshold_used": threshold,
                     "ewma_vol": ewma_vol,
-                    "avg_bars_per_day": row["avg_bars_per_day"],
+                    "avg_bars_per_day": avg_bars,
                 }
             )
             s_pos, s_neg = 0.0, 0.0
-            last_event_idx = row["bar_index"]
+            last_event_idx = bar_index
         elif abs(s_neg) > threshold and spacing_ok:
             events.append(
                 {
                     "event_id": str(uuid.uuid4()),
-                    "symbol": row["symbol"],
-                    "event_ts": row["bar_end_time"],
-                    "bar_index": row["bar_index"],
+                    "symbol": symbol,
+                    "event_ts": event_ts,
+                    "bar_index": bar_index,
                     "log_return": lr,
                     "cusum_side": "down",
                     "cusum_value": abs(s_neg),
                     "threshold_used": threshold,
                     "ewma_vol": ewma_vol,
-                    "avg_bars_per_day": row["avg_bars_per_day"],
+                    "avg_bars_per_day": avg_bars,
                 }
             )
             s_pos, s_neg = 0.0, 0.0
-            last_event_idx = row["bar_index"]
+            last_event_idx = bar_index
 
     if not events:
         return _empty_events()
