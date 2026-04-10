@@ -13,8 +13,39 @@ import mlflow
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
 import polars as pl
 from databricks.connect import DatabricksSession
+
+# Set up McKinsey color palette theme for Plotly
+_MC_LIGHT_GRAY = "#f5f5f5"
+_MC_DARK_GRAY = "#222222"
+_MC_BLUE = "#005eb8"
+_MC_MEDIUM_GRAY = "#a2aaad"
+_MC_YELLOW = "#f3c13a"
+
+pio.templates["mckinsey"] = go.layout.Template(
+    layout=go.Layout(
+        paper_bgcolor=_MC_LIGHT_GRAY,
+        plot_bgcolor=_MC_LIGHT_GRAY,
+        font=dict(color=_MC_DARK_GRAY),
+        title=dict(font=dict(color=_MC_DARK_GRAY)),
+        xaxis=dict(
+            gridcolor=_MC_MEDIUM_GRAY, 
+            zerolinecolor=_MC_MEDIUM_GRAY,
+            tickfont=dict(color=_MC_DARK_GRAY),
+            titlefont=dict(color=_MC_DARK_GRAY)
+        ),
+        yaxis=dict(
+            gridcolor=_MC_MEDIUM_GRAY, 
+            zerolinecolor=_MC_MEDIUM_GRAY,
+            tickfont=dict(color=_MC_DARK_GRAY),
+            titlefont=dict(color=_MC_DARK_GRAY)
+        ),
+        colorway=[_MC_BLUE, _MC_YELLOW, _MC_DARK_GRAY, _MC_MEDIUM_GRAY]
+    )
+)
+pio.templates.default = "mckinsey"
 
 logger = logging.getLogger(__name__)
 
