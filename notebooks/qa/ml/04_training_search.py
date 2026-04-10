@@ -1,0 +1,114 @@
+"""
+ml/04_training_search.py — QA notebook for training search (sklearn pipeline).
+
+Run: uv run python notebooks/qa/ml/04_training_search.py
+"""
+import dataclasses
+import math
+
+import pandas as pd
+import polars as pl
+
+from notebooks.qa.utils import (
+    build_histogram,
+    build_scatter,
+    load_raw_dollar_bars,
+    log_diag,
+    log_plotly,
+    mlflow_component_run,
+)
+from trading_databricks.ml.config import CUSUMConfig, MLPipelineConfig, TrainingConfig
+from trading_databricks.ml.cusum import detect_cusum_events
+from trading_databricks.ml.labeling import compute_triple_barrier_labels
+from trading_databricks.ml.training.sample_weights import compute_sample_weights
+from trading_databricks.ml.transformers.pipeline import build_training_pipeline
+from trading_databricks.ml.transformers.search import build_hyperparameter_search
+
+
+def cpcv_fold_report(splitter, labels):
+    import numpy as np
+    splits = list(splitter.split(np.zeros((len(labels), 1))))
+    rows = []
+    y = labels["label"].to_numpy()
+    for fold_idx, (train_idx, test_idx) in enumerate(splits):
+        train_y = y[train_idx]
+        test_y = y[test_idx]
+        rows.append({
+            "fold_idx": fold_idx,
+            "train_n": len(train_idx),
+            "test_n": len(test_idx),
+            "train_class_balance": str(dict(zip(*np.unique(train_y, return_counts=True)))),
+            "test_class_balance": str(dict(zip(*np.unique(test_y, return_counts=True))))
+        })
+    return pl.DataFrame(rows)
+
+def cv_results_to_polars(cv_results_):
+    return pl.from_pandas(pd.DataFrame(cv_results_))
+
+base_config = MLPipelineConfig()
+# Use n_iter_search=5 to keep notebook fast
+config = dataclasses.replace(base_config, training=TrainingConfig(n_iter_search=5))
+
+flat_params = {
+    "training.algorithm": config.training.algorithm,
+    "training.n_iter_search": config.training.n_iter_search,
+    "training.random_state": config.training.random_state,
+    "cpcv.n_groups": config.cpcv.n_groups,
+    "cpcv.k_test": config.cpcv.k_test,
+    "cpcv.embargo_pct": config.cpcv.embargo_pct,
+}
+
+with mlflow_component_run(layer="ml", component="training_search", params=flat_params):
+    # Section 1 — Load upstream components
+    bars = load_raw_dollar_bars(symbol="BTCUSDT", limit=50_000)
+    events = detect_cusum_events(bars, config=CUSUMConfig(lookback_days=1))
+    labels = compute_triple_barrier_labels(events, bars, config=config.label)
+
+    if labels.is_empty():
+        raise RuntimeError("No labels generated to train on.")
+
+    # Section 2 — Exercise component
+    weights = compute_sample_weights(labels)
+    pipeline, splitter = build_training_pipeline(config, bars, events, labels)
+    search = build_hyperparameter_search(pipeline, splitter, config.training)
+
+    import mlflow
+    search.fit(events, labels["label"].to_numpy(), classifier__sample_weight=weights)
+    mlflow.log_params(search.best_params_)
+
+    # Section 3 — Diagnostic tables
+    log_diag("cpcv_fold_report", cpcv_fold_report(splitter, labels))
+
+    weights_summary = pl.DataFrame({
+        "min": [weights.min()], "max": [weights.max()],
+        "mean": [weights.mean()], "std": [weights.std()],
+        "n_nan": [int(pl.Series(weights).is_nan().sum())],
+        "n_nonpos": [int((weights <= 0).sum())]
+    })
+    log_diag("sample_weights_summary", weights_summary)
+
+    cv_res_df = cv_results_to_polars(search.cv_results_)
+    log_diag("cv_results", cv_res_df)
+    log_diag("best_params_report", pl.DataFrame([search.best_params_]))
+
+    mlflow.log_metrics({
+        "cv.best_score": search.best_score_,
+        "cv.mean_score_mean": cv_res_df["mean_test_score"].mean(),
+        "cv.mean_score_std": cv_res_df["mean_test_score"].std(),
+        "sample_weights.mean": weights.mean(),
+        "sample_weights.min": weights.min(),
+        "cpcv.n_folds": splitter.get_n_splits()
+    })
+
+    # Section 4 — Visual inspection
+    log_plotly("cv_score_vs_rank", build_scatter(cv_res_df, x="rank_test_score", y="mean_test_score"))
+    log_plotly("sample_weights_hist", build_histogram(pl.Series("weights", weights)))
+
+    # Section 5 — Sanity assertions
+    assert splitter.get_n_splits() == math.comb(config.cpcv.n_groups, config.cpcv.k_test) == 15
+    import numpy as np
+    for train_idx, test_idx in splitter.split(np.zeros((len(labels), 1))):
+        assert len(set(train_idx) & set(test_idx)) == 0
+    assert (weights > 0).all()
+    assert search.best_score_ is not None
+    assert len(search.cv_results_["mean_test_score"]) == config.training.n_iter_search

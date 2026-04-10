@@ -6,42 +6,42 @@ bundle:
 
 variables:
   catalog:
-    description: Unity Catalog catalog name (e.g. trading-signal-gen-dev)
-    default: trading-signal-gen-dev
+    description: Unity Catalog catalog name
+    default: smart-trading-dev
   bucket:
     description: S3 bucket name containing raw data
     default: ai-trading-raw-ap-southeast-1
   bronze_schema:
     description: Schema for bronze (raw) Delta tables
-    default: bronze
+    default: 01_bronze
   silver_schema:
     description: Schema for silver (cleaned) Delta tables
-    default: silver
+    default: 02_silver
   gold_schema:
     description: Schema for gold (feature/bar) Delta tables
-    default: gold
+    default: 03_gold
   schema_location_base:
     description: Base Volume path for Auto Loader cloudFiles schema metadata
-    default: /Volumes/${var.catalog}/pipeline_metadata/trading_databricks_metadata/schemas
+    default: /Volumes/${var.catalog}/00_volume/pipeline_metadata/trading_databricks_metadata/schemas
 
 include:
   - resources/*.yml
 
 workspace:
-  host: https://dbc-73b04434-2ca0.cloud.databricks.com
+  host: https://dbc-cbfc9b81-4abc.cloud.databricks.com
 
 targets:
   dev:
     default: true
     mode: development
     variables:
-      catalog: trading-signal-gen-dev
+      catalog: smart-trading-dev
 
   staging:
     workspace:
       root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
     variables:
-      catalog: trading-signal-gen-staging
+      catalog: smart-trading-staging
     presets:
       trigger_pause_status: PAUSED
 
@@ -50,6 +50,6 @@ targets:
     workspace:
       root_path: /Workspace/Shared/.bundle/${bundle.name}/${bundle.target}
     variables:
-      catalog: trading-signal-prod
+      catalog: smart-trading-prod
     # run_as:
     #   service_principal_name: <TBD — provision SP and uncomment>
