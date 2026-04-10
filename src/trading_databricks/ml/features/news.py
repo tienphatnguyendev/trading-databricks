@@ -68,7 +68,16 @@ def compute_news(
         return _build_zero_frame(events, now)
 
     # Use join_where for lazy range join and avoid Python loops
-    impactful_news = news_features.filter(pl.col("is_impactful"))
+    # Select only required columns from news_features before joining
+    impactful_news = news_features.filter(pl.col("is_impactful")).select(
+        [
+            "published_at",
+            "l1_category",
+            "validation_status",
+            "confidence",
+            "expected_direction",
+        ]
+    )
     lookback_hours = config.news_lookback_hours
 
     # Join news articles into the lookback window of each event:
