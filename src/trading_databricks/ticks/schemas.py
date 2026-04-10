@@ -53,6 +53,8 @@ TICKS_CLEANED_SCHEMA = StructType(
 # Common output schema for all bar types
 BAR_SCHEMA = StructType(
     [
+        StructField("symbol", StringType(), nullable=False),
+        StructField("exchange", StringType(), nullable=False),
         StructField("bar_index", LongType(), nullable=False),
         StructField("bar_start_time", TimestampType(), nullable=False),
         StructField("bar_end_time", TimestampType(), nullable=False),
