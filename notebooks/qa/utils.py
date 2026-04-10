@@ -22,11 +22,9 @@ def get_spark():
 def load_ml_training_data(limit: int | None = None) -> pl.DataFrame:
     spark = get_spark()
     query = "SELECT * FROM `smart-trading-dev`.others.ml_training_data ORDER BY timestamp"
-    args = {}
     if limit is not None:
-        query += " LIMIT :limit"
-        args["limit"] = limit
-    return pl.from_arrow(spark.sql(query, args=args).toArrow())
+        query += f" LIMIT {limit}"
+    return pl.from_arrow(spark.sql(query).toArrow())
 
 def load_raw_aggtrades(limit: int | None = None) -> pl.DataFrame:
     df = load_ml_training_data(limit)
@@ -37,42 +35,26 @@ def load_raw_aggtrades(limit: int | None = None) -> pl.DataFrame:
         pl.lit("BTCUSDT").alias("symbol")
     ])
 
-def load_raw_dollar_bars(
-    symbol: str,
-    start: datetime | None = None,
-    end: datetime | None = None,
-    catalog: str = "trading-signal-gen-dev",
-    limit: int | None = None,
-) -> pl.DataFrame:
+def load_raw_dollar_bars(symbol: str, start: datetime | None = None, end: datetime | None = None, catalog: str = "trading-signal-gen-dev", limit: int | None = None) -> pl.DataFrame:
     spark = get_spark()
-    # Catalog name cannot be parameterized, so we use identifier backticks
-    # and ensure it's a simple string, though here it's usually internal.
-    query = f"SELECT * FROM `{catalog}`.gold.dollar_bars WHERE symbol = :symbol"
-    args = {"symbol": symbol}
-
+    query = f"SELECT * FROM `{catalog}`.gold.dollar_bars WHERE symbol = '{symbol}'"
     if start:
-        query += " AND bar_end_time >= :start"
-        args["start"] = start.isoformat()
+        query += f" AND bar_end_time >= '{start.isoformat()}'"
     if end:
-        query += " AND bar_end_time <= :end"
-        args["end"] = end.isoformat()
-
+        query += f" AND bar_end_time <= '{end.isoformat()}'"
     query += " ORDER BY bar_index"
-
     if limit:
-        query += " LIMIT :limit"
-        args["limit"] = limit
-
+        query += f" LIMIT {limit}"
     try:
-        return pl.from_arrow(spark.sql(query, args=args).toArrow())
+        return pl.from_arrow(spark.sql(query).toArrow())
     except Exception as e:
         raise RuntimeError(f"gold.dollar_bars not found in {catalog}. Run pipeline or use notebook 00. Error: {e}")
 
 def load_article_sample(n: int = 10) -> list[dict]:
     spark = get_spark()
-    query = "SELECT * FROM `smart-trading-dev`.others.mas_training_dataset ORDER BY story_id LIMIT :limit"
+    query = f"SELECT * FROM `smart-trading-dev`.others.mas_training_dataset ORDER BY story_id LIMIT {n}"
     # Use fixed seed sampling if needed, but for now just ordered limit
-    pdf = spark.sql(query, args={"limit": n}).toPandas()
+    pdf = spark.sql(query).toPandas()
     records = pdf.to_dict(orient="records")
     results = []
     prefix = "Can you summarize the market impact of the following news: "

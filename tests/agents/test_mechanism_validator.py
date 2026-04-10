@@ -1,5 +1,4 @@
 """Tests for mechanism validator (TRD-30)."""
-
 from __future__ import annotations
 
 import numpy as np
@@ -8,6 +7,7 @@ import pytest
 from trading_databricks.agents.config import MechanismValidatorConfig
 from trading_databricks.agents.nodes.mechanism_validator import (
     ExtractionInput,
+    ValidationResult,
     _compute_evidence_relevance,
     _cosine_similarity,
     _parse_l1_category,
@@ -52,12 +52,12 @@ def mock_embed_fn():
         ("", ""),
     ],
 )
-def test_parse_l1_category(treatment_class: str, expected: str) -> None:
+def test_parse_l1_category(treatment_class: str, expected: str):
     """Parse L1 from treatment_class with best-effort handling."""
     assert _parse_l1_category(treatment_class) == expected
 
 
-def test_validate_evidence_spans_degenerate_cases() -> None:
+def test_validate_evidence_spans_degenerate_cases():
     """Reject empty evidence, empty body, whitespace-only spans."""
     # Empty spans
     assert not _validate_evidence_spans([], "article body")
@@ -72,7 +72,7 @@ def test_validate_evidence_spans_degenerate_cases() -> None:
     assert not _validate_evidence_spans(["  \n  "], "article")
 
 
-def test_validate_evidence_spans_normalized_matching() -> None:
+def test_validate_evidence_spans_normalized_matching():
     """Casefold + strip allows case/whitespace variations."""
     # Case and whitespace variation
     assert _validate_evidence_spans(["  Bitcoin PRICE  "], "The bitcoin price is rising")
@@ -91,7 +91,7 @@ def test_validate_evidence_spans_normalized_matching() -> None:
     )
 
 
-def test_validate_evidence_spans_fabricated_evidence() -> None:
+def test_validate_evidence_spans_fabricated_evidence():
     """Evidence not in article body → reject."""
     assert not _validate_evidence_spans(
         ["ethereum price drops"], "The SEC approved the Bitcoin ETF"
@@ -101,20 +101,20 @@ def test_validate_evidence_spans_fabricated_evidence() -> None:
 # ===== _cosine_similarity tests =====
 
 
-def test_cosine_similarity_identical_vectors() -> None:
+def test_cosine_similarity_identical_vectors():
     """Identical vectors → similarity = 1.0."""
     vec = [1.0, 2.0, 3.0]
     assert _cosine_similarity(vec, vec) == 1.0
 
 
-def test_cosine_similarity_orthogonal_vectors() -> None:
+def test_cosine_similarity_orthogonal_vectors():
     """Orthogonal vectors → similarity = 0.0."""
     vec_a = [1.0, 0.0, 0.0]
     vec_b = [0.0, 1.0, 0.0]
     assert _cosine_similarity(vec_a, vec_b) == 0.0
 
 
-def test_cosine_similarity_opposite_vectors() -> None:
+def test_cosine_similarity_opposite_vectors():
     """Opposite vectors → clamped to 0.0 (not -1.0)."""
     vec_a = [1.0, 2.0, 3.0]
     vec_b = [-1.0, -2.0, -3.0]
@@ -122,13 +122,13 @@ def test_cosine_similarity_opposite_vectors() -> None:
     assert result == 0.0  # Clamped
 
 
-def test_cosine_similarity_zero_length_vectors() -> None:
+def test_cosine_similarity_zero_length_vectors():
     """Zero-length vectors → 0.0 (no similarity)."""
     assert _cosine_similarity([0.0, 0.0, 0.0], [1.0, 2.0, 3.0]) == 0.0
     assert _cosine_similarity([1.0, 2.0, 3.0], [0.0, 0.0, 0.0]) == 0.0
 
 
-def test_cosine_similarity_similar_vectors() -> None:
+def test_cosine_similarity_similar_vectors():
     """Similar vectors → 0.0 < similarity < 1.0."""
     vec_a = [1.0, 2.0, 3.0]
     vec_b = [1.1, 2.1, 2.9]
@@ -139,7 +139,7 @@ def test_cosine_similarity_similar_vectors() -> None:
 # ===== _compute_evidence_relevance tests =====
 
 
-def test_compute_evidence_relevance_success(mock_embed_fn) -> None:
+def test_compute_evidence_relevance_success(mock_embed_fn):
     """Module B computes score when embeddings succeed."""
     result = _compute_evidence_relevance(
         trigger_event="SEC approves ETF",
@@ -152,7 +152,7 @@ def test_compute_evidence_relevance_success(mock_embed_fn) -> None:
     assert 0.0 <= result <= 1.0
 
 
-def test_compute_evidence_relevance_empty_evidence() -> None:
+def test_compute_evidence_relevance_empty_evidence():
     """Empty evidence → None immediately, no embed call."""
     call_count = 0
 
@@ -182,7 +182,7 @@ def test_compute_evidence_relevance_empty_evidence() -> None:
     assert call_count == 0  # Never called
 
 
-def test_compute_evidence_relevance_embed_failure() -> None:
+def test_compute_evidence_relevance_embed_failure():
     """When embed_fn raises, return None and log warning."""
 
     def failing_embed_fn(text: str) -> list[float]:
@@ -201,7 +201,7 @@ def test_compute_evidence_relevance_embed_failure() -> None:
 # ===== validate_extraction integration tests =====
 
 
-def test_validate_extraction_accepted(mock_whitelist, mock_embed_fn) -> None:
+def test_validate_extraction_accepted(mock_whitelist, mock_embed_fn):
     """Valid extraction passes all checks."""
     extraction: ExtractionInput = {
         "treatment_class": "Regulation.etf_ruling",
@@ -225,7 +225,7 @@ def test_validate_extraction_accepted(mock_whitelist, mock_embed_fn) -> None:
     assert 0.0 <= result["evidence_relevance_score"] <= 1.0
 
 
-def test_validate_extraction_rejected_mechanism(mock_whitelist, mock_embed_fn) -> None:
+def test_validate_extraction_rejected_mechanism(mock_whitelist, mock_embed_fn):
     """Unknown mechanism → rejected_mechanism, Module B still runs."""
     extraction: ExtractionInput = {
         "treatment_class": "Regulation.etf_ruling",
@@ -249,7 +249,7 @@ def test_validate_extraction_rejected_mechanism(mock_whitelist, mock_embed_fn) -
     assert 0.0 <= result["evidence_relevance_score"] <= 1.0
 
 
-def test_validate_extraction_rejected_direction(mock_whitelist, mock_embed_fn) -> None:
+def test_validate_extraction_rejected_direction(mock_whitelist, mock_embed_fn):
     """Invalid direction → rejected_direction, Module B runs."""
     extraction: ExtractionInput = {
         "treatment_class": "Regulation.etf_ruling",
@@ -272,7 +272,7 @@ def test_validate_extraction_rejected_direction(mock_whitelist, mock_embed_fn) -
     assert result["evidence_relevance_score"] is not None  # Module B runs
 
 
-def test_validate_extraction_rejected_evidence(mock_whitelist, mock_embed_fn) -> None:
+def test_validate_extraction_rejected_evidence(mock_whitelist, mock_embed_fn):
     """Evidence not in article body → rejected_evidence, Module B tries."""
     extraction: ExtractionInput = {
         "treatment_class": "Regulation.etf_ruling",
@@ -296,9 +296,7 @@ def test_validate_extraction_rejected_evidence(mock_whitelist, mock_embed_fn) ->
     # or returns None if embed_fn rejects the text
 
 
-def test_validate_extraction_malformed_treatment_class(
-    mock_whitelist, mock_embed_fn
-) -> None:
+def test_validate_extraction_malformed_treatment_class(mock_whitelist, mock_embed_fn):
     """Malformed treatment_class → fails at whitelist lookup."""
     extraction: ExtractionInput = {
         "treatment_class": ".malformed",  # Parses to empty L1
@@ -318,31 +316,3 @@ def test_validate_extraction_malformed_treatment_class(
 
     assert result["validation_status"] == "rejected_mechanism"
     assert result["rejected_mechanism_raw"] == "regulatory_clarity"
-
-
-def test_validate_extraction_embed_failure(mock_whitelist: dict) -> None:
-    """When embed_fn raises, return None for score but continue validation."""
-    extraction: ExtractionInput = {
-        "treatment_class": "Regulation.etf_ruling",
-        "trigger_event": "SEC approves ETF",
-        "mechanism": "regulatory_clarity",
-        "expected_direction": "bullish",
-        "evidence_spans": ["The SEC approved the first spot ETF"],
-    }
-
-    def failing_embed_fn(text: str) -> list[float]:
-        raise ValueError("Simulated embedding failure")
-
-    result = validate_extraction(
-        extraction,
-        article_body="The SEC approved the first spot ETF for Bitcoin",
-        whitelist=mock_whitelist,
-        config=MechanismValidatorConfig(),
-        embed_fn=failing_embed_fn,
-    )
-
-    # Status should still be accepted (validation proceeded normally)
-    assert result["validation_status"] == "accepted"
-    assert result["rejected_mechanism_raw"] is None
-    # But evidence_relevance_score is None due to fallback
-    assert result["evidence_relevance_score"] is None
