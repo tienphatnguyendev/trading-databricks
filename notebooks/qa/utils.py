@@ -34,13 +34,13 @@ pio.templates["mckinsey"] = go.layout.Template(
             gridcolor=_MC_MEDIUM_GRAY, 
             zerolinecolor=_MC_MEDIUM_GRAY,
             tickfont=dict(color=_MC_DARK_GRAY),
-            titlefont=dict(color=_MC_DARK_GRAY)
+            title=dict(font=dict(color=_MC_DARK_GRAY))
         ),
         yaxis=dict(
             gridcolor=_MC_MEDIUM_GRAY, 
             zerolinecolor=_MC_MEDIUM_GRAY,
             tickfont=dict(color=_MC_DARK_GRAY),
-            titlefont=dict(color=_MC_DARK_GRAY)
+            title=dict(font=dict(color=_MC_DARK_GRAY))
         ),
         colorway=[_MC_BLUE, _MC_YELLOW, _MC_DARK_GRAY, _MC_MEDIUM_GRAY]
     )
@@ -332,7 +332,14 @@ def build_triple_barrier_chart(events: pl.DataFrame, labels: pl.DataFrame, bars:
 
     # Join labels to events to get barrier levels and hit times
     if "event_ts" in labels_df.columns:
-        labeled_events = events_df.join(labels_df, on="event_ts", how="inner")
+        # Align timezones if they differ
+        if events_df.schema["event_ts"] != labels_df.schema["event_ts"]:
+            # Drop timezone before join (safest cross-timezone approach in Polars)
+            e_df = events_df.with_columns(pl.col("event_ts").dt.replace_time_zone(None))
+            l_df = labels_df.with_columns(pl.col("event_ts").dt.replace_time_zone(None))
+            labeled_events = e_df.join(l_df, on="event_ts", how="inner")
+        else:
+            labeled_events = events_df.join(labels_df, on="event_ts", how="inner")
     else:
         # Fallback if label index is bar_index or something else
         labeled_events = events_df.join(labels_df, left_on="bar_index", right_on="bar_index", how="inner")
@@ -354,6 +361,16 @@ def build_triple_barrier_chart(events: pl.DataFrame, labels: pl.DataFrame, bars:
     start_window = min_ts - margin
     end_window = max_ts + margin
 
+    # Ensure start/end window are timezone-aware if the bars DF is timezone-aware
+    if bars_df.schema["bar_end_time"].time_zone is not None:
+        if start_window.tzinfo is None:
+            start_window = start_window.tz_localize("UTC")
+            end_window = end_window.tz_localize("UTC")
+    else:
+        if start_window.tzinfo is not None:
+            start_window = start_window.tz_localize(None)
+            end_window = end_window.tz_localize(None)
+
     # Filter bars to this window
     window_bars = bars_df.filter(
         (pl.col("bar_end_time") >= start_window) & 
@@ -372,18 +389,26 @@ def build_triple_barrier_chart(events: pl.DataFrame, labels: pl.DataFrame, bars:
     ))
 
     # 2. Entries (Buying points)
+    if "close_bar" in sample.columns:
+        entry_prices = sample["close_bar"]
+    else:
+        entry_prices = sample["bar_index"].apply(
+            lambda bi: window_bars.loc[window_bars["bar_index"] == bi, "close"].values[0]
+            if bi in window_bars["bar_index"].values else np.nan
+        )
+
     fig.add_trace(go.Scatter(
         x=sample["event_ts"],
-        y=sample["close_bar"],
+        y=entry_prices,
         mode="markers",
         name="CUSUM Event (Entry)",
         marker=dict(color="#005eb8", size=10, symbol="triangle-up") # mc_blue
     ))
 
     # 3. Draw Barriers and Hit Markers for each event
-    for _, row in sample.iterrows():
+    for i, row in sample.iterrows():
         entry_time = row["event_ts"]
-        entry_price = row["close_bar"]
+        entry_price = entry_prices.iloc[i]
         mature_time = row["matured_at"]
         hit_type = row["barrier_hit"] # usually 1 (upper), -1 (lower), 0 (time)
         

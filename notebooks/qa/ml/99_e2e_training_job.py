@@ -23,6 +23,7 @@ from notebooks.qa.utils import (
     build_histogram,
     build_label_distribution,
     build_scatter,
+    build_triple_barrier_chart,
     load_raw_dollar_bars,
     log_dataset,
     log_diag,
@@ -176,6 +177,10 @@ with mlflow_component_run(
     avg_holding = (labels["matured_at"] - labels["event_ts"]).mean()
     print_observation(f"Average holding period for a labeled trade is {avg_holding}.")
 
+    # Visualize the triple barrier trajectories
+    log_plotly("step3_triple_barrier_trajectories", build_triple_barrier_chart(events, labels, bars, n_samples=5))
+    print_observation("Logged interactive triple barrier trajectories visualization showing price paths and barrier hits.")
+
     print_header("Step 4: Pipeline Assembly & Feature Extraction")
     t0 = time.time()
     weights = compute_sample_weights(labels)
@@ -199,7 +204,7 @@ with mlflow_component_run(
 
     # Extract features for correlation analysis
     features_union = pipeline.named_steps["features"]
-    features_df = features_union.fit_transform(events)
+    features_df = features_union.fit_transform(events, bars=bars)
     numeric_features = features_df.select(
         [c for c in features_df.columns if features_df[c].dtype.is_numeric()]
     )
