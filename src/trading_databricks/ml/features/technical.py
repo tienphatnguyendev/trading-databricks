@@ -116,4 +116,4 @@ def compute_technical(
         bars_with_indicators.select(feature_cols),
         on="bar_index",
         how="left",
-    ).select(list(_TECHNICAL_SCHEMA.keys()))
+    ).select(list(_TECHNICAL_SCHEMA.keys())).cast(_TECHNICAL_SCHEMA)
