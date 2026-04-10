@@ -13,6 +13,7 @@ import polars as pl
 from notebooks.qa.utils import (
     build_scatter,
     load_raw_dollar_bars,
+    log_dataset,
     log_diag,
     log_plotly,
     mlflow_component_run,
@@ -24,6 +25,13 @@ from trading_databricks.ml.training.sample_weights import compute_sample_weights
 from trading_databricks.ml.transformers.mlflow_model import TradingPipelineModel
 from trading_databricks.ml.transformers.pipeline import build_training_pipeline
 from trading_databricks.ml.transformers.search import build_hyperparameter_search
+
+mlflow.sklearn.autolog(
+    log_models=False,
+    log_input_examples=False,
+    silent=True,
+    max_tuning_runs=None,
+)
 
 base_config = MLPipelineConfig()
 config = dataclasses.replace(base_config, training=TrainingConfig(n_iter_search=5))
@@ -37,6 +45,7 @@ with mlflow_component_run(
     # Load
     t0 = time.time()
     bars = load_raw_dollar_bars(symbol="BTCUSDT", limit=100_000)
+    log_dataset(bars, name="dollar_bars", source="trading-signal-gen-dev.gold.dollar_bars")
     durations["load"] = time.time() - t0
 
     # CUSUM

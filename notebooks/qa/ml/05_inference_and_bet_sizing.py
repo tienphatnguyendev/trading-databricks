@@ -5,6 +5,7 @@ Run: uv run python notebooks/qa/ml/05_inference_and_bet_sizing.py
 """
 from datetime import UTC, datetime
 
+import mlflow
 import numpy as np
 import polars as pl
 
@@ -106,7 +107,6 @@ with mlflow_component_run(
     log_diag("tier_mapping_report", pl.DataFrame(tier_mapping))
     log_diag("positions_report", positions)
 
-    import mlflow
     mlflow.log_metrics({
         "predictions.n_total": preds.height,
         "predictions.n_passed": bet_sizes.height,

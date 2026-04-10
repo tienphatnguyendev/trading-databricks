@@ -6,6 +6,7 @@ Run: uv run python notebooks/qa/ml/04_training_search.py
 import dataclasses
 import math
 
+import mlflow
 import pandas as pd
 import polars as pl
 
@@ -13,6 +14,7 @@ from notebooks.qa.utils import (
     build_histogram,
     build_scatter,
     load_raw_dollar_bars,
+    log_dataset,
     log_diag,
     log_plotly,
     mlflow_component_run,
@@ -45,6 +47,13 @@ def cpcv_fold_report(splitter, labels):
 def cv_results_to_polars(cv_results_):
     return pl.from_pandas(pd.DataFrame(cv_results_))
 
+mlflow.sklearn.autolog(
+    log_models=False,
+    log_input_examples=False,
+    silent=True,
+    max_tuning_runs=None,
+)
+
 base_config = MLPipelineConfig()
 # Use n_iter_search=5 to keep notebook fast
 config = dataclasses.replace(base_config, training=TrainingConfig(n_iter_search=5))
@@ -61,6 +70,7 @@ flat_params = {
 with mlflow_component_run(layer="ml", component="training_search", params=flat_params):
     # Section 1 — Load upstream components
     bars = load_raw_dollar_bars(symbol="BTCUSDT", limit=50_000)
+    log_dataset(bars, name="dollar_bars", source="trading-signal-gen-dev.gold.dollar_bars")
     events = detect_cusum_events(bars, config=CUSUMConfig(lookback_days=1))
     labels = compute_triple_barrier_labels(events, bars, config=config.label)
 
@@ -72,7 +82,6 @@ with mlflow_component_run(layer="ml", component="training_search", params=flat_p
     pipeline, splitter = build_training_pipeline(config, bars, events, labels)
     search = build_hyperparameter_search(pipeline, splitter, config.training)
 
-    import mlflow
     search.fit(events, labels["label"].to_numpy(), classifier__sample_weight=weights)
     mlflow.log_params(search.best_params_)
 

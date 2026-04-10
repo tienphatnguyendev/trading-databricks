@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
+import sys
 import tempfile
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 import mlflow
@@ -15,6 +17,25 @@ import polars as pl
 from databricks.connect import DatabricksSession
 
 logger = logging.getLogger(__name__)
+
+
+def _git_tags() -> dict[str, str]:
+    """Capture git provenance metadata; returns empty dict if git is unavailable."""
+    tags: dict[str, str] = {}
+    try:
+        tags["git.commit"] = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+        ).decode().strip()
+        tags["git.branch"] = subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], stderr=subprocess.DEVNULL
+        ).decode().strip()
+        dirty = subprocess.check_output(
+            ["git", "status", "--porcelain"], stderr=subprocess.DEVNULL
+        ).decode().strip()
+        tags["git.dirty"] = "true" if dirty else "false"
+    except Exception:
+        pass
+    return tags
 
 def get_spark():
     return DatabricksSession.builder.serverless(True).getOrCreate()
@@ -119,13 +140,23 @@ def load_article_sample(n: int = 10) -> list[dict]:
 
 @contextmanager
 def mlflow_component_run(layer: str, component: str, params: dict | None = None):
-    user = os.environ.get("USER", "default_user")
-    mlflow.set_experiment(f"/Users/{user}/trading-databricks-qa/{layer}/{component}")
+    mlflow.set_tracking_uri("databricks")
+    try:
+        mlflow.enable_system_metrics_logging()
+    except Exception:
+        logger.warning("System metrics logging unavailable (psutil not installed)")
+    mlflow.set_experiment(f"/Shared/trading-databricks-qa/{layer}/{component}")
 
-    with mlflow.start_run() as run:
+    run_name = f"{component}-{datetime.now(UTC):%Y%m%d-%H%M%S}"
+    with mlflow.start_run(run_name=run_name) as run:
         if params:
             mlflow.log_params(params)
-        mlflow.set_tags({"layer": layer, "component": component})
+        mlflow.set_tags({
+            "layer": layer,
+            "component": component,
+            "python.version": sys.version.split()[0],
+            **_git_tags(),
+        })
         try:
             yield run
             mlflow.set_tag("status", "pass")
@@ -144,10 +175,29 @@ def log_diag(name: str, df: pl.DataFrame | pl.LazyFrame, metrics: dict | None = 
         mlflow.log_metrics(metrics)
 
 def log_plotly(name: str, fig) -> None:
-    with tempfile.TemporaryDirectory() as tmpdir:
-        path = os.path.join(tmpdir, f"{name}.html")
-        fig.write_html(path)
-        mlflow.log_artifact(path, artifact_path="plots")
+    mlflow.log_text(
+        fig.to_html(full_html=False, include_plotlyjs="cdn"),
+        f"plots/{name}.html",
+    )
+
+
+def log_dataset(
+    df: pl.DataFrame,
+    name: str,
+    source: str,
+    context: str = "training",
+) -> None:
+    """Log dataset lineage to the active MLflow run.
+
+    Converts to pandas at the MLflow boundary (MLflow data API requires pandas).
+    Logs row/column counts as metrics for quick inspection in the UI.
+    """
+    dataset = mlflow.data.from_pandas(df.to_pandas(), source=source, name=name)
+    mlflow.log_input(dataset, context=context)
+    mlflow.log_metrics({
+        f"dataset.{name}.n_rows": df.height,
+        f"dataset.{name}.n_cols": len(df.columns),
+    })
 
 def log_sample(name: str, df: pl.DataFrame, n: int = 100) -> None:
     log_diag(name, df.head(n))

@@ -10,6 +10,7 @@ import polars as pl
 from notebooks.qa.utils import (
     build_heatmap,
     load_raw_dollar_bars,
+    log_dataset,
     log_diag,
     log_plotly,
     mlflow_component_run,
@@ -36,6 +37,7 @@ with mlflow_component_run(
 ):
     # Section 1 — Load input
     bars = load_raw_dollar_bars(symbol="BTCUSDT", limit=50_000)
+    log_dataset(bars, name="dollar_bars", source="trading-signal-gen-dev.gold.dollar_bars")
     events = detect_cusum_events(bars, config=cusum_config)
 
     if events.is_empty():
