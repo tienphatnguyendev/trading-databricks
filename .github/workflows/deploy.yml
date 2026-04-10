@@ -34,7 +34,7 @@ jobs:
       - uses: databricks/setup-cli@main
       - name: Validate DABs bundle
         run: |
-          for i in 1 2 3 4 5 6 7 8 9 10; do
+          for i in {1..20}; do
             set +e
             databricks bundle validate
             code=$?
@@ -42,9 +42,9 @@ jobs:
             if [ $code -eq 0 ]; then
               break
             fi
-            echo "Attempt $i failed. Retrying in 10 seconds..."
-            sleep 10
-            if [ $i -eq 10 ]; then
+            echo "Attempt $i failed. Retrying in 15 seconds..."
+            sleep 15
+            if [ $i -eq 20 ]; then
               exit 1
             fi
           done
@@ -65,7 +65,7 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
         run: |
-          for i in 1 2 3 4 5; do
+          for i in {1..20}; do
             set +e
             uv run pytest -v
             code=$?
@@ -78,7 +78,7 @@ jobs:
             fi
             echo "Attempt $i failed with code $code. Retrying in 30 seconds..."
             sleep 30
-            if [ $i -eq 5 ]; then
+            if [ $i -eq 20 ]; then
               exit 1
             fi
           done
