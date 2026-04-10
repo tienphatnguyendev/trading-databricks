@@ -11,6 +11,7 @@ from typing import Literal
 
 import mlflow
 import numpy as np
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import plotly.io as pio
@@ -31,13 +32,13 @@ pio.templates["mckinsey"] = go.layout.Template(
         font=dict(color=_MC_DARK_GRAY),
         title=dict(font=dict(color=_MC_DARK_GRAY)),
         xaxis=dict(
-            gridcolor=_MC_MEDIUM_GRAY, 
+            gridcolor=_MC_MEDIUM_GRAY,
             zerolinecolor=_MC_MEDIUM_GRAY,
             tickfont=dict(color=_MC_DARK_GRAY),
             title=dict(font=dict(color=_MC_DARK_GRAY))
         ),
         yaxis=dict(
-            gridcolor=_MC_MEDIUM_GRAY, 
+            gridcolor=_MC_MEDIUM_GRAY,
             zerolinecolor=_MC_MEDIUM_GRAY,
             tickfont=dict(color=_MC_DARK_GRAY),
             title=dict(font=dict(color=_MC_DARK_GRAY))
@@ -347,17 +348,17 @@ def build_triple_barrier_chart(events: pl.DataFrame, labels: pl.DataFrame, bars:
     # Sample a continuous subset
     if labeled_events.height == 0:
         return go.Figure()
-    
+
     # Take the first n_samples valid labeled events
     sample = labeled_events.head(n_samples).to_pandas()
-    
+
     # Determine the time window for the chart + 10% margin
     min_ts = sample["event_ts"].min()
     max_ts = sample["matured_at"].max()
-    
+
     time_span = max_ts - min_ts
     margin = time_span * 0.1 if time_span.total_seconds() > 0 else pd.Timedelta(hours=1)
-    
+
     start_window = min_ts - margin
     end_window = max_ts + margin
 
@@ -373,7 +374,7 @@ def build_triple_barrier_chart(events: pl.DataFrame, labels: pl.DataFrame, bars:
 
     # Filter bars to this window
     window_bars = bars_df.filter(
-        (pl.col("bar_end_time") >= start_window) & 
+        (pl.col("bar_end_time") >= start_window) &
         (pl.col("bar_end_time") <= end_window)
     ).to_pandas()
 
@@ -408,22 +409,22 @@ def build_triple_barrier_chart(events: pl.DataFrame, labels: pl.DataFrame, bars:
     # 3. Draw Barriers and Hit Markers for each event
     for i, row in sample.iterrows():
         entry_time = row["event_ts"]
-        entry_price = entry_prices.iloc[i]
+        entry_price = entry_prices.loc[i]
         mature_time = row["matured_at"]
         hit_type = row["barrier_hit"] # usually 1 (upper), -1 (lower), 0 (time)
-        
-        # We need the barrier thresholds. Usually config is applied. 
+
+        # We need the barrier thresholds. Usually config is applied.
         # For visualization, we can infer upper/lower from the return if barrier_hit != 0
-        # However, to be exact we rely on the hit price. 
+        # However, to be exact we rely on the hit price.
         # Since we don't have the exact threshold levels in the return DF standardly,
         # we will plot a horizontal line from entry to mature_time for the Hit price if hit.
-        
+
         hit_price = window_bars.loc[window_bars["bar_end_time"] == mature_time, "close"]
         if not hit_price.empty:
             hit_price = hit_price.values[0]
         else:
             hit_price = entry_price # fallback
-            
+
         # Upper/Lower/Time hit marker
         color = "#a2aaad" # Default time barrier
         name = "Time Barrier Hit"
@@ -442,7 +443,7 @@ def build_triple_barrier_chart(events: pl.DataFrame, labels: pl.DataFrame, bars:
             line=dict(color=color, width=1, dash="dot"),
             showlegend=False
         ))
-        
+
         # Draw the hit marker
         fig.add_trace(go.Scatter(
             x=[mature_time],
@@ -452,7 +453,7 @@ def build_triple_barrier_chart(events: pl.DataFrame, labels: pl.DataFrame, bars:
             marker=dict(color=color, size=12, symbol="x"),
             showlegend=False # We'll just rely on colors, legend gets too cluttered if repeated
         ))
-        
+
     # Add dummy traces for legend entries for the hit markers
     fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#005eb8", size=12, symbol="x"), name="Take Profit Hit"))
     fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#f3c13a", size=12, symbol="x"), name="Stop Loss Hit"))
@@ -463,7 +464,7 @@ def build_triple_barrier_chart(events: pl.DataFrame, labels: pl.DataFrame, bars:
         xaxis_title="Time",
         yaxis_title="Price"
     )
-    
+
     return fig
 
 NODE_NAMES = ("context_retriever", "few_shot_retriever", "uncertainty_router", "causality_extractor", "mechanism_validator")
@@ -540,5 +541,5 @@ def _prepare_local_graph_environment():
                 with patch("trading_databricks.agents.taxonomy.load_taxonomy", side_effect=mock_taxonomy):
                     with _patch_vs_index("success"):
                         # Patch embed_fn injection in graph to use graceful mock
-                        with patch("trading_databricks.agents.graph._mechanism_validator_node") as mock_validator:
+                        with patch("trading_databricks.agents.graph._mechanism_validator_node"):
                             yield
