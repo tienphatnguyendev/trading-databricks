@@ -64,7 +64,10 @@ with mlflow_component_run(layer="ml", component="cusum_and_labeling", params=fla
 
     # Section 4 — Visual inspection
     if not events.is_empty():
-        log_plotly("cusum_events_on_price", build_scatter(bars, x="bar_end_time", y="close", overlay=events))
+        event_overlay = events.join(
+            bars.select("bar_index", "bar_end_time", "close"), on="bar_index", how="left"
+        )
+        log_plotly("cusum_events_on_price", build_scatter(bars, x="bar_end_time", y="close", overlay=event_overlay))
     if not labels.is_empty():
         log_plotly("label_class_balance", build_label_distribution(labels["label"]))
         log_plotly("barrier_hit_distribution", build_label_distribution(labels["barrier_hit"]))

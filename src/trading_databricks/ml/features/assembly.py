@@ -24,7 +24,7 @@ def assemble_training_dataset(
     for ff in feature_frames:
         # Drop duplicate key columns from ff to avoid suffix clashes
         ff_clean = ff.select(
-            [c for c in ff.columns if c not in ("symbol", "event_ts")]
+            [c for c in ff.columns if c not in ("symbol", "event_ts", "computed_at")]
             if "event_id" in ff.columns
             else ff.columns
         )

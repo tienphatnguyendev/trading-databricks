@@ -38,8 +38,9 @@ def build_training_pipeline(
         ("classifier", RandomForestClassifier(random_state=config.training.random_state)),
     ])
 
-    # Ensure CPCVSplitter gets integer arrays
-    t_start = labels["bar_index"].to_numpy()
+    # labels schema omits bar_index; recover it from events via join
+    labels_with_bar = labels.join(events.select("event_id", "bar_index"), on="event_id", how="left")
+    t_start = labels_with_bar["bar_index"].to_numpy()
     t_end = labels["vertical_bar"].to_numpy()
 
     splitter = CPCVSplitter(
