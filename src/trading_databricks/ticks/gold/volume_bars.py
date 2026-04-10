@@ -5,10 +5,13 @@ fixed threshold N.
 """
 from __future__ import annotations
 
+from pyspark.sql import DataFrame, Window
+from pyspark.sql import functions as F
+
 from trading_databricks.common.config import VolumeBarConfig
 
 
-def build_volume_bars(ticks_df, *, config: VolumeBarConfig):
+def build_volume_bars(ticks_df: DataFrame, *, config: VolumeBarConfig) -> DataFrame:
     """Build volume bars from a cleaned ticks DataFrame.
 
     Args:
@@ -18,9 +21,6 @@ def build_volume_bars(ticks_df, *, config: VolumeBarConfig):
     Returns:
         Spark DataFrame conforming to BAR_SCHEMA with one row per bar.
     """
-    from pyspark.sql import Window
-    from pyspark.sql import functions as F
-
     # 1. Define window for cumulative volume calculation.
     # Partition by symbol/exchange and order by timestamp/trade_id for determinism.
     window_spec = Window.partitionBy("symbol", "exchange").orderBy("timestamp", "trade_id")
@@ -55,4 +55,5 @@ def build_volume_bars(ticks_df, *, config: VolumeBarConfig):
         )
     )
 
-    return bars_df
+    from trading_databricks.ticks.schemas import BAR_SCHEMA
+    return bars_df.select(*BAR_SCHEMA.names)

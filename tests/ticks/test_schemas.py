@@ -11,9 +11,17 @@ def test_ticks_raw_schema_has_required_fields():
 
 def test_bar_schema_has_ohlcv_fields():
     field_names = {f.name for f in BAR_SCHEMA.fields}
-    assert {"bar_index", "open", "high", "low", "close", "volume", "dollar_volume"}.issubset(
-        field_names
-    )
+    assert {
+        "symbol",
+        "exchange",
+        "bar_index",
+        "open",
+        "high",
+        "low",
+        "close",
+        "volume",
+        "dollar_volume",
+    }.issubset(field_names)
 
 
 def test_ticks_cleaned_schema_has_dollar_value():
