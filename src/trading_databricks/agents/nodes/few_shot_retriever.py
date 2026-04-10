@@ -115,6 +115,8 @@ def get_accepted_chain_count(
 
     # Query source table
     logger.debug(f"Cache miss for {cache_key}, querying DB")
+    # catalog and schema are identifiers and cannot be parameterized.
+    # They should be validated or come from trusted config.
     query = f"""
         SELECT COUNT(*)
         FROM `{catalog}`.`{schema}`.news_causal_features
