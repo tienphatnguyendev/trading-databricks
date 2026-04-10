@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
 
 import numpy as np
 import polars as pl
@@ -76,109 +75,145 @@ def compute_triple_barrier_labels(
         ).alias("vertical_bar"),
     )
 
-    # --- Step 3: Forward-scan loop ---
-    bars_array = bars.select("bar_index", "close", "bar_end_time").to_dicts()
-    bar_by_idx: dict[int, dict] = {b["bar_index"]: b for b in bars_array}
+    # --- Step 3: Forward-scan logic (Vectorized via join_where) ---
+    # Filter valid events to process
+    events_valid = events_with_close.filter(
+        (pl.col("vertical_bar") <= max_bar_index)
+        & (pl.col("upper_level") > pl.col("lower_level"))
+        & (pl.col("close") > 0.0)
+    )
 
-    labeled: list[dict] = []
-
-    for event in events_with_close.iter_rows(named=True):
-        vertical_bar = int(event["vertical_bar"])
-
-        # Maturation filter: skip events that haven't matured yet
-        if vertical_bar > max_bar_index:
-            continue
-
-        upper = float(event["upper_level"])
-        lower = float(event["lower_level"])
-
-        if upper <= lower:
-            logger.warning(
-                "Skipping event %s: degenerate barriers (upper=%.6f <= lower=%.6f)",
-                event["event_id"],
-                upper,
-                lower,
-            )
-            continue
-
-        entry_close = float(event["close"])
-
-        if entry_close <= 0.0:
-            logger.warning(
-                "Skipping event %s: entry_close=%.6f <= 0", event["event_id"], entry_close
-            )
-            continue
-
-        event_bar_index = int(event["bar_index"])
-        label: int = 0
-        barrier_hit: str = "vertical"
-        matured_at: datetime = event["event_ts"]
-        return_pct: float = 0.0
-        found = False
-        exit_bar = vertical_bar
-
-        # Scan future bars from bar_index+1 to vertical_bar inclusive
-        for bi in range(event_bar_index + 1, vertical_bar + 1):
-            bar = bar_by_idx.get(bi)
-            if bar is None:
-                continue
-            c = float(bar["close"])
-            if c >= upper:
-                label = 1
-                barrier_hit = "upper"
-                matured_at = bar["bar_end_time"]
-                return_pct = (c - entry_close) / entry_close
-                found = True
-                exit_bar = bi
-                break
-            elif c <= lower:
-                label = -1
-                barrier_hit = "lower"
-                matured_at = bar["bar_end_time"]
-                return_pct = (c - entry_close) / entry_close
-                found = True
-                exit_bar = bi
-                break
-
-        if not found:  # vertical barrier hit
-            last_bar = bar_by_idx.get(vertical_bar)
-            if last_bar is not None:
-                return_pct = (float(last_bar["close"]) - entry_close) / entry_close
-                sigma = float(event["ewma_vol"])
-                if sigma > 0 and abs(return_pct) < config.zero_label_threshold * sigma:
-                    label = 0
-                else:
-                    label = 1 if return_pct > 0 else -1
-                matured_at = last_bar["bar_end_time"]
-            else:
-                label = 0
-                matured_at = event["event_ts"]
-            barrier_hit = "vertical"
-
-        labeled.append(
-            {
-                "_bar_index": event_bar_index,
-                "_exit_bar": exit_bar,  # temp column for uniqueness
-                "event_id": event["event_id"],
-                "symbol": event["symbol"],
-                "event_ts": event["event_ts"],
-                "label": label,
-                "barrier_hit": barrier_hit,
-                "return_pct": return_pct,
-                "upper_level": upper,
-                "lower_level": lower,
-                "vertical_bar": vertical_bar,
-                "matured_at": matured_at,
-                "avg_uniqueness": 1.0,  # overwritten below
-            }
-        )
-
-    if not labeled:
-        logger.warning("No matured events after labeling. Returning empty DF.")
+    if events_valid.is_empty():
+        logger.warning("No matured events after filtering. Returning empty DF.")
         return _empty_labels()
 
-    # Concurrency pass
-    labeled = _fill_avg_uniqueness(labeled)
+    # Rename bar columns for the non-equi join to avoid conflicts
+    bars_for_join = bars.select(
+        pl.col("bar_index").alias("future_bar_index"),
+        pl.col("close").alias("future_close"),
+        pl.col("bar_end_time").alias("future_time"),
+    ).lazy()
+
+    events_lazy = events_valid.lazy()
+
+    # Find all future bars where the barrier is hit
+    hits = events_lazy.join_where(
+        bars_for_join,
+        pl.col("future_bar_index") > pl.col("bar_index"),
+        pl.col("future_bar_index") <= pl.col("vertical_bar"),
+        (pl.col("future_close") >= pl.col("upper_level"))
+        | (pl.col("future_close") <= pl.col("lower_level")),
+    )
+
+    # We only care about the FIRST hit
+    first_hits = hits.group_by("event_id").agg(
+        pl.col("future_bar_index").min().alias("hit_bar_index")
+    )
+
+    # Join the specific hit bar info back
+    hits_data = first_hits.join(
+        bars_for_join, left_on="hit_bar_index", right_on="future_bar_index", how="left"
+    )
+
+    # Re-join hits to the valid events
+    final_events = events_lazy.join(hits_data, on="event_id", how="left")
+
+    # Also join the vertical barrier bar data (used if no upper/lower hit occurs)
+    vertical_bars = bars_for_join.rename(
+        {
+            "future_bar_index": "vert_bar_index",
+            "future_close": "vert_close",
+            "future_time": "vert_time",
+        }
+    )
+
+    final_events = final_events.join(
+        vertical_bars, left_on="vertical_bar", right_on="vert_bar_index", how="left"
+    )
+
+    # Determine hit_type (upper, lower, vertical)
+    # Check upper hit BEFORE lower hit on the same bar to match original precedence
+    final_events = final_events.with_columns(
+        hit_type=pl.when(
+            pl.col("hit_bar_index").is_not_null()
+            & (pl.col("future_close") >= pl.col("upper_level"))
+        )
+        .then(pl.lit("upper"))
+        .when(
+            pl.col("hit_bar_index").is_not_null()
+            & (pl.col("future_close") <= pl.col("lower_level"))
+        )
+        .then(pl.lit("lower"))
+        .otherwise(pl.lit("vertical"))
+    )
+
+    # Compute outcomes (matured_at, _exit_bar, return_pct)
+    final_events = final_events.with_columns(
+        matured_at=pl.when(pl.col("hit_type") == "vertical")
+        .then(
+            pl.when(pl.col("vert_time").is_not_null())
+            .then(pl.col("vert_time"))
+            .otherwise(pl.col("event_ts"))
+        )
+        .otherwise(pl.col("future_time")),
+        _exit_bar=pl.when(pl.col("hit_type") == "vertical")
+        .then(pl.col("vertical_bar"))
+        .otherwise(pl.col("hit_bar_index")),
+        return_pct=pl.when(pl.col("hit_type") == "vertical")
+        .then(
+            pl.when(pl.col("vert_close").is_not_null())
+            .then((pl.col("vert_close") - pl.col("close")) / pl.col("close"))
+            .otherwise(pl.lit(0.0))
+        )
+        .otherwise((pl.col("future_close") - pl.col("close")) / pl.col("close")),
+    )
+
+    # Assign labels based on returns and hit types
+    final_events = final_events.with_columns(
+        label=pl.when(pl.col("hit_type") == "upper")
+        .then(pl.lit(1))
+        .when(pl.col("hit_type") == "lower")
+        .then(pl.lit(-1))
+        .otherwise(
+            # Vertical barrier logic
+            pl.when(
+                (pl.col("ewma_vol") > 0)
+                & (
+                    pl.col("return_pct").abs()
+                    < config.zero_label_threshold * pl.col("ewma_vol")
+                )
+            )
+            .then(pl.lit(0))
+            .when(pl.col("return_pct") > 0)
+            .then(pl.lit(1))
+            .when(pl.col("return_pct") < 0)
+            .then(pl.lit(-1))
+            .otherwise(pl.lit(0))
+        )
+    )
+
+    # Format dataframe to match expected schema + internal columns for uniqueness
+    res_lazy = final_events.select(
+        pl.col("bar_index").alias("_bar_index"),
+        pl.col("_exit_bar"),
+        pl.col("event_id"),
+        pl.col("symbol"),
+        pl.col("event_ts"),
+        pl.col("label").cast(pl.Int32),
+        pl.col("hit_type").alias("barrier_hit"),
+        pl.col("return_pct"),
+        pl.col("upper_level"),
+        pl.col("lower_level"),
+        pl.col("vertical_bar"),
+        pl.col("matured_at"),
+    )
+
+    # Collect the results
+    res_df = res_lazy.collect()
+
+    # Use the existing concurrency logic
+    dicts = res_df.to_dicts()
+    labeled = _fill_avg_uniqueness(dicts)
 
     return pl.DataFrame(
         [
