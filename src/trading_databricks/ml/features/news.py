@@ -67,73 +67,89 @@ def compute_news(
     if news_features is None:
         return _build_zero_frame(events, now)
 
-    # Collect events and news for cross-join aggregation
-    events_df = events.collect()
-    if events_df.is_empty():
-        return pl.DataFrame(schema=_NEWS_SCHEMA).lazy()
-
-    news_df = news_features.filter(pl.col("is_impactful")).collect()
-
-    if news_df.is_empty():
-        return _build_zero_frame(events, now)
-
-    rows: list[dict] = []
+    # Use join_where for lazy range join and avoid Python loops
+    # Select only required columns from news_features before joining
+    impactful_news = news_features.filter(pl.col("is_impactful")).select(
+        [
+            "published_at",
+            "l1_category",
+            "validation_status",
+            "confidence",
+            "expected_direction",
+        ]
+    )
     lookback_hours = config.news_lookback_hours
 
-    for event in events_df.iter_rows(named=True):
-        t_end = event["event_ts"]
-        t_start = t_end - timedelta(hours=lookback_hours)
+    # Join news articles into the lookback window of each event:
+    # [event_ts - lookback, event_ts)
+    joined = events.join_where(
+        impactful_news,
+        pl.col("event_ts") > pl.col("published_at"),
+        pl.col("event_ts") <= pl.col("published_at") + timedelta(hours=lookback_hours),
+    )
 
-        window = news_df.filter(
-            (pl.col("published_at") >= t_start) & (pl.col("published_at") < t_end)
+    aggs = []
+    for l1 in _L1_CATEGORIES:
+        cat_mask = pl.col("l1_category") == l1
+        accepted_mask = cat_mask & (pl.col("validation_status") == "accepted")
+
+        aggs += [
+            pl.col("validation_status")
+            .filter(cat_mask)
+            .eq("accepted")
+            .mean()
+            .fill_null(0.0)
+            .alias(f"news_accepted_ratio_{l1}"),
+            accepted_mask.sum().cast(pl.Int32).alias(f"news_count_{l1}"),
+            pl.col("confidence").filter(accepted_mask).max().fill_null(0.0).alias(
+                f"news_max_conf_{l1}"
+            ),
+            pl.col("expected_direction")
+            .filter(accepted_mask)
+            .mode()
+            .first()
+            .fill_null(0)
+            .cast(pl.Int32)
+            .alias(f"news_direction_{l1}"),
+        ]
+
+    total_accepted_mask = (pl.col("validation_status") == "accepted") & (
+        pl.col("l1_category").is_in(_L1_CATEGORIES)
+    )
+    aggs += [
+        total_accepted_mask.sum().cast(pl.Int32).alias("news_volume_24h"),
+        (pl.col("confidence") * pl.col("expected_direction").cast(pl.Float64))
+        .filter(total_accepted_mask)
+        .sum()
+        .fill_null(0.0)
+        .alias("news_sentiment_score"),
+    ]
+
+    # Aggregate news features per event. Use symbol/event_ts as well to keep them.
+    group_keys = ["event_id", "symbol", "event_ts"]
+    news_aggregated = joined.group_by(group_keys).agg(aggs)
+
+    # Join back to original events to ensure all events are present
+    # (including those with no news)
+    result = events.join(news_aggregated, on=group_keys, how="left")
+
+    # Fill default values for events that had no impactful news in their window
+    fill_values = {
+        "news_volume_24h": 0,
+        "news_sentiment_score": 0.0,
+        **{f"news_count_{l1}": 0 for l1 in _L1_CATEGORIES},
+        **{f"news_max_conf_{l1}": 0.0 for l1 in _L1_CATEGORIES},
+        **{f"news_direction_{l1}": 0 for l1 in _L1_CATEGORIES},
+        **{f"news_accepted_ratio_{l1}": 0.0 for l1 in _L1_CATEGORIES},
+    }
+
+    return (
+        result.with_columns(
+            [pl.col(col).fill_null(val) for col, val in fill_values.items()]
         )
-
-        row: dict = {
-            "event_id": event["event_id"],
-            "symbol": event["symbol"],
-            "event_ts": t_end,
-            "computed_at": now,
-        }
-
-        total_count = 0
-        sentiment_score = 0.0
-
-        for l1 in _L1_CATEGORIES:
-            all_cat = window.filter(pl.col("l1_category") == l1)
-            total_cat_cnt = len(all_cat)
-
-            row[f"news_accepted_ratio_{l1}"] = (
-                float((all_cat["validation_status"] == "accepted").mean())
-                if total_cat_cnt > 0
-                else 0.0
-            )
-
-            cat = all_cat.filter(pl.col("validation_status") == "accepted")
-            cnt = len(cat)
-            row[f"news_count_{l1}"] = cnt
-            row[f"news_max_conf_{l1}"] = (
-                float(cat["confidence"].max()) if cnt > 0 else 0.0
-            )
-            if cnt > 0:
-                # mode of expected_direction
-                direction_mode = (
-                    cat.group_by("expected_direction")
-                    .agg(pl.len().alias("cnt"))
-                    .sort("cnt", descending=True)["expected_direction"][0]
-                )
-                row[f"news_direction_{l1}"] = int(direction_mode)
-            else:
-                row[f"news_direction_{l1}"] = 0
-
-            total_count += cnt
-            if cnt > 0:
-                sentiment_score += float(
-                    (cat["confidence"] * cat["expected_direction"].cast(pl.Float64)).sum()
-                )
-
-        row["news_volume_24h"] = total_count
-        row["news_sentiment_score"] = sentiment_score
-        row["has_news_24h"] = total_count > 0
-        rows.append(row)
-
-    return pl.DataFrame(rows, schema=_NEWS_SCHEMA).lazy()
+        .with_columns(
+            pl.lit(now).alias("computed_at"),
+            (pl.col("news_volume_24h") > 0).alias("has_news_24h"),
+        )
+        .select(list(_NEWS_SCHEMA.keys()))
+    )
