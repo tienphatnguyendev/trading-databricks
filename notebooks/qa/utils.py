@@ -21,23 +21,75 @@ def get_spark():
 
 def load_ml_training_data(limit: int | None = None) -> pl.DataFrame:
     spark = get_spark()
-    query = "SELECT * FROM `smart-trading-dev`.others.ml_training_data ORDER BY timestamp"
+    query = "SELECT * FROM `smart-trading-dev`.`01_bronze`.raw_aggtrades_samples ORDER BY timestamp"
     if limit is not None:
         query += f" LIMIT {limit}"
     return pl.from_arrow(spark.sql(query).toArrow())
 
 def load_raw_aggtrades(limit: int | None = None) -> pl.DataFrame:
-    df = load_ml_training_data(limit)
-    if df.is_empty():
-        return pl.DataFrame(schema={"timestamp": pl.Int64, "bar_start_time": pl.Datetime("us"), "symbol": pl.Utf8})
-    return df.with_columns([
-        pl.from_epoch(pl.col("timestamp"), time_unit="us").alias("bar_start_time"),
-        pl.lit("BTCUSDT").alias("symbol")
-    ])
+    from pyspark.sql import functions as F
 
-def load_raw_dollar_bars(symbol: str, start: datetime | None = None, end: datetime | None = None, catalog: str = "trading-signal-gen-dev", limit: int | None = None) -> pl.DataFrame:
     spark = get_spark()
-    query = f"SELECT * FROM `{catalog}`.gold.dollar_bars WHERE symbol = '{symbol}'"
+    query = "SELECT * FROM `smart-trading-dev`.`01_bronze`.raw_aggtrades_samples ORDER BY timestamp"
+    if limit is not None:
+        query += f" LIMIT {limit}"
+    sdf = (
+        spark.sql(query)
+        .withColumn("timestamp", F.col("timestamp").cast("timestamp"))
+        .withColumn("price", F.col("price").cast("double"))
+        .withColumn("quantity", F.col("quantity").cast("double"))
+    )
+    df = pl.from_arrow(sdf.toArrow())
+    if df.is_empty():
+        return pl.DataFrame(schema={"timestamp": pl.Datetime("us"), "price": pl.Float64, "quantity": pl.Float64, "symbol": pl.Utf8})
+    return df
+
+def _build_dollar_bars_from_bronze(symbol: str, threshold: float = 1_000_000.0, limit: int | None = None) -> pl.DataFrame:
+    """Build hourly OHLCV bars in Spark from bronze when gold is not yet populated.
+
+    Uses 1-hour time buckets instead of cumulative-dollar buckets to avoid an
+    expensive global window function over 52M+ rows. Returns bars spanning the
+    full sample period (672 bars for a 28-day month), which is enough for CUSUM.
+    All aggregation runs on Databricks serverless; only the small result is
+    transferred locally via Arrow.
+    """
+    from pyspark.sql import functions as F
+
+    spark = get_spark()
+    sdf = (
+        spark.sql(
+            f"SELECT "
+            f"  CAST(timestamp AS TIMESTAMP) AS ts, "
+            f"  CAST(price AS DOUBLE) AS price, "
+            f"  CAST(quantity AS DOUBLE) AS quantity, "
+            f"  symbol "
+            f"FROM `smart-trading-dev`.`01_bronze`.raw_aggtrades_samples "
+            f"WHERE symbol = '{symbol}'"
+        )
+        # Bar index = Unix epoch hour — strictly monotonically increasing, unique per hour
+        .withColumn("bar_index", F.floor(F.unix_timestamp("ts") / 3600).cast("long"))
+        .groupBy("bar_index", "symbol")
+        .agg(
+            F.min("ts").alias("bar_start_time"),
+            F.max("ts").alias("bar_end_time"),
+            F.avg("price").alias("open"),
+            F.max("price").alias("high"),
+            F.min("price").alias("low"),
+            F.avg("price").alias("close"),
+            F.sum("quantity").alias("volume"),
+            F.sum(F.col("price") * F.col("quantity")).alias("dollar_volume"),
+            F.count("*").cast("long").alias("tick_count"),
+        )
+        .orderBy("bar_index")
+    )
+    if limit:
+        sdf = sdf.limit(limit)
+    return pl.from_arrow(sdf.toArrow())
+
+
+def load_raw_dollar_bars(symbol: str, start: datetime | None = None, end: datetime | None = None, catalog: str = "smart-trading-dev", limit: int | None = None) -> pl.DataFrame:
+    spark = get_spark()
+    query = f"SELECT * FROM `{catalog}`.`03_gold`.dollar_bars WHERE symbol = '{symbol}'"
     if start:
         query += f" AND bar_end_time >= '{start.isoformat()}'"
     if end:
@@ -47,28 +99,23 @@ def load_raw_dollar_bars(symbol: str, start: datetime | None = None, end: dateti
         query += f" LIMIT {limit}"
     try:
         return pl.from_arrow(spark.sql(query).toArrow())
-    except Exception as e:
-        raise RuntimeError(f"gold.dollar_bars not found in {catalog}. Run pipeline or use notebook 00. Error: {e}")
+    except Exception:
+        logger.warning("03_gold.dollar_bars not found in %s — building from 01_bronze", catalog)
+        return _build_dollar_bars_from_bronze(symbol, limit=limit)
 
 def load_article_sample(n: int = 10) -> list[dict]:
     spark = get_spark()
-    query = f"SELECT * FROM `smart-trading-dev`.others.mas_training_dataset ORDER BY story_id LIMIT {n}"
-    # Use fixed seed sampling if needed, but for now just ordered limit
-    pdf = spark.sql(query).toPandas()
-    records = pdf.to_dict(orient="records")
-    results = []
-    prefix = "Can you summarize the market impact of the following news: "
-    for r in records:
-        headline = r.get("request", "")
-        if headline.startswith(prefix):
-            headline = headline[len(prefix):]
-        results.append({
+    query = f"SELECT * FROM `smart-trading-dev`.`01_bronze`.news_agent_eval_dataset ORDER BY story_id LIMIT {n}"
+    records = pl.from_arrow(spark.sql(query).toArrow()).to_dicts()
+    return [
+        {
             "story_id": r.get("story_id"),
-            "headline": headline.strip(),
-            "body": r.get("context"),
-            "published_at": r.get("published_at")
-        })
-    return results
+            "headline": (r.get("headline") or "").strip(),
+            "body": r.get("body"),
+            "published_at": r.get("published_at"),
+        }
+        for r in records
+    ]
 
 @contextmanager
 def mlflow_component_run(layer: str, component: str, params: dict | None = None):

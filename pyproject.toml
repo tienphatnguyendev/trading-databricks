@@ -25,6 +25,7 @@ dependencies = [
 dev = [
     "databricks-connect>=17.3,<18",
     "ipykernel>=6.29.5,<7",
+    "plotly>=5.0",
     "pre-commit>=4.1.0,<5",
     "pytest>=8.3.4,<9",
     "chispa>=0.9,<1",

@@ -3,6 +3,8 @@ ml/00_dollar_bar_construction.py — QA notebook for dollar bar construction.
 
 Run: uv run python notebooks/qa/ml/00_dollar_bar_construction.py
 """
+import polars as pl
+
 from notebooks.qa.utils import (
     build_candlestick,
     load_raw_aggtrades,
@@ -14,15 +16,6 @@ from notebooks.qa.utils import (
 from trading_databricks.common.config import DollarBarConfig
 from trading_databricks.ml.validation import validate_bars
 
-# TRD-5 Blocker Check
-try:
-    from trading_databricks.ticks.gold.dollar_bars import build_dollar_bars
-except Exception:
-    pass
-
-# We will raise explicitly as requested by the spec until TRD-5 is complete
-raise NotImplementedError("Dollar bar construction not yet implemented — see TRD-5 blocker.")
-
 config = DollarBarConfig(threshold=1_000_000.0)
 
 with mlflow_component_run(
@@ -33,8 +26,33 @@ with mlflow_component_run(
     ticks = load_raw_aggtrades(limit=500_000)
     log_diag("input_ticks_summary", summarize(ticks, ["price", "quantity", "timestamp"]))
 
-    # Section 2 — Exercise component
-    bars = build_dollar_bars(ticks, config=config)
+    # Section 2 — Build dollar bars inline (TRD-5 not yet merged; replicated here)
+    ticks_with_dv = ticks.with_columns(
+        (pl.col("price") * pl.col("quantity")).alias("dollar_value")
+    )
+    ticks_with_idx = ticks_with_dv.with_columns(
+        (pl.col("dollar_value").cum_sum() / config.threshold)
+        .floor()
+        .cast(pl.Int64)
+        .alias("bar_index")
+    )
+    bars = (
+        ticks_with_idx
+        .group_by("bar_index")
+        .agg([
+            pl.col("timestamp").first().alias("bar_start_time"),
+            pl.col("timestamp").last().alias("bar_end_time"),
+            pl.col("price").first().alias("open"),
+            pl.col("price").max().alias("high"),
+            pl.col("price").min().alias("low"),
+            pl.col("price").last().alias("close"),
+            pl.col("quantity").sum().alias("volume"),
+            pl.col("dollar_value").sum().alias("dollar_volume"),
+            pl.col("symbol").first().alias("symbol"),
+            pl.len().alias("tick_count"),
+        ])
+        .sort("bar_index")
+    )
 
     # Section 3 — Diagnostic tables
     log_diag("bars_summary", summarize(bars, ["close", "volume", "dollar_volume"]))

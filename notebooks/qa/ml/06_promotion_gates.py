@@ -88,8 +88,13 @@ with mlflow_component_run(
     grid_df = pl.DataFrame(grid_rows)
     log_diag("psr_dsr_grid", grid_df)
 
-    # 2D Heatmap of PSR Surface
-    psr_pivot = grid_df.pivot(index="n_samples", on="sharpe", values="psr").fill_null(0)
+    # 2D Heatmap of PSR Surface — cast sharpe to string so Polars can use as column names
+    psr_pivot = (
+        grid_df
+        .with_columns(pl.col("sharpe").round(3).cast(pl.String).alias("sharpe_key"))
+        .pivot(index="n_samples", on="sharpe_key", values="psr")
+        .fill_null(0)
+    )
     log_plotly("psr_surface", build_heatmap(psr_pivot, corr=False))
 
     # Section 5 — Sanity assertions

@@ -27,7 +27,7 @@ from trading_databricks.agents.graph import build_mas_graph
 os.environ["MAS_QA_MOCK_LLM"] = os.environ.get("MAS_QA_MOCK_LLM", "1")
 
 config = MASConfig()
-mlflow.set_experiment("/Users/default_user/trading-databricks-qa/mas/e2e_graph")
+mlflow.set_experiment(f"/Users/{os.environ.get('USER', 'default_user')}/trading-databricks-qa/mas/e2e_graph")
 mlflow.langchain.autolog()
 
 with mlflow_component_run(

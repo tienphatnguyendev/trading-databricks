@@ -70,7 +70,12 @@ with mlflow_component_run(
     news_mock = compute_news(events.lazy(), mock_news, config=feature_config).collect()
 
     # Section 3 & 4 — Visuals and Correlations
-    all_features = tech_feats.join(vol_feats, on="event_id").join(volu_feats, on="event_id")
+    _dup_cols = ["symbol", "event_ts", "computed_at"]
+    all_features = (
+        tech_feats
+        .join(vol_feats.drop([c for c in _dup_cols if c in vol_feats.columns]), on="event_id")
+        .join(volu_feats.drop([c for c in _dup_cols if c in volu_feats.columns]), on="event_id")
+    )
     # Ensure we drop string columns for correlation
     numeric_features = all_features.select([col for col in all_features.columns if all_features[col].dtype.is_numeric()])
     log_plotly("feature_correlation_heatmap", build_heatmap(numeric_features, corr=True))

@@ -11,8 +11,11 @@ Databricks transformation & feature engineering for the algorithmic trading syst
 **This repo reads from S3 — it never writes to it.**
 
 **Current stage sample datasets** (must use these for ML & MAS development):
-- `trading-signal-gen-dev.bronze.news_agent_eval_dataset`
-- `trading-signal-gen-dev.bronze.raw_aggtrades_samples`
+- `smart-trading-dev.01_bronze.news_agent_eval_dataset`
+- `smart-trading-dev.01_bronze.raw_aggtrades_samples`
+
+**Workspace:** `smart-trading-v2` (`https://dbc-cbfc9b81-4abc.cloud.databricks.com`)
+**Catalog layout:** `smart-trading-dev` → schemas `01_bronze`, `02_silver`, `03_gold`, `others`
 
 ## 🔍 First Thing Every Session
 
