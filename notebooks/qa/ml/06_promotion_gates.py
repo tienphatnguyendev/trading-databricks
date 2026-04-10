@@ -3,6 +3,7 @@ ml/06_promotion_gates.py — QA notebook for promotion gates evaluation.
 
 Run: uv run python notebooks/qa/ml/06_promotion_gates.py
 """
+import mlflow
 import numpy as np
 import polars as pl
 
@@ -58,7 +59,6 @@ with mlflow_component_run(
         all_returns = np.concatenate([p["returns"] for p in paths])
         log_plotly(f"equity_{name}", build_equity_curve(all_returns))
 
-        import mlflow
         mlflow.log_metrics({
             f"{name}_psr": result["psr"],
             f"{name}_dsr": result["dsr"],

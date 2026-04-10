@@ -9,6 +9,7 @@ from notebooks.qa.utils import (
     build_label_distribution,
     build_scatter,
     load_raw_dollar_bars,
+    log_dataset,
     log_diag,
     log_plotly,
     mlflow_component_run,
@@ -37,6 +38,7 @@ flat_params = {
 with mlflow_component_run(layer="ml", component="cusum_and_labeling", params=flat_params):
     # Section 1 — Load input
     bars = load_raw_dollar_bars(symbol="BTCUSDT", limit=50_000)
+    log_dataset(bars, name="dollar_bars", source="trading-signal-gen-dev.gold.dollar_bars")
     log_diag("bars_input_summary", summarize(bars, ["close", "volume"]))
 
     # Section 2 — Exercise component

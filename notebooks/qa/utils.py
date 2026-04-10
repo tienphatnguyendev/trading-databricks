@@ -2,19 +2,72 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
+import sys
 import tempfile
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Literal
 
 import mlflow
 import numpy as np
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.io as pio
 import polars as pl
 from databricks.connect import DatabricksSession
 
+# Set up McKinsey color palette theme for Plotly
+_MC_LIGHT_GRAY = "#f5f5f5"
+_MC_DARK_GRAY = "#222222"
+_MC_BLUE = "#005eb8"
+_MC_MEDIUM_GRAY = "#a2aaad"
+_MC_YELLOW = "#f3c13a"
+
+pio.templates["mckinsey"] = go.layout.Template(
+    layout=go.Layout(
+        paper_bgcolor=_MC_LIGHT_GRAY,
+        plot_bgcolor=_MC_LIGHT_GRAY,
+        font=dict(color=_MC_DARK_GRAY),
+        title=dict(font=dict(color=_MC_DARK_GRAY)),
+        xaxis=dict(
+            gridcolor=_MC_MEDIUM_GRAY,
+            zerolinecolor=_MC_MEDIUM_GRAY,
+            tickfont=dict(color=_MC_DARK_GRAY),
+            title=dict(font=dict(color=_MC_DARK_GRAY))
+        ),
+        yaxis=dict(
+            gridcolor=_MC_MEDIUM_GRAY,
+            zerolinecolor=_MC_MEDIUM_GRAY,
+            tickfont=dict(color=_MC_DARK_GRAY),
+            title=dict(font=dict(color=_MC_DARK_GRAY))
+        ),
+        colorway=[_MC_BLUE, _MC_YELLOW, _MC_DARK_GRAY, _MC_MEDIUM_GRAY]
+    )
+)
+pio.templates.default = "mckinsey"
+
 logger = logging.getLogger(__name__)
+
+
+def _git_tags() -> dict[str, str]:
+    """Capture git provenance metadata; returns empty dict if git is unavailable."""
+    tags: dict[str, str] = {}
+    try:
+        tags["git.commit"] = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"], stderr=subprocess.DEVNULL
+        ).decode().strip()
+        tags["git.branch"] = subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], stderr=subprocess.DEVNULL
+        ).decode().strip()
+        dirty = subprocess.check_output(
+            ["git", "status", "--porcelain"], stderr=subprocess.DEVNULL
+        ).decode().strip()
+        tags["git.dirty"] = "true" if dirty else "false"
+    except Exception:
+        pass
+    return tags
 
 def get_spark():
     return DatabricksSession.builder.serverless(True).getOrCreate()
@@ -119,13 +172,23 @@ def load_article_sample(n: int = 10) -> list[dict]:
 
 @contextmanager
 def mlflow_component_run(layer: str, component: str, params: dict | None = None):
-    user = os.environ.get("USER", "default_user")
-    mlflow.set_experiment(f"/Users/{user}/trading-databricks-qa/{layer}/{component}")
+    mlflow.set_tracking_uri("databricks")
+    try:
+        mlflow.enable_system_metrics_logging()
+    except Exception:
+        logger.warning("System metrics logging unavailable (psutil not installed)")
+    mlflow.set_experiment(f"/Shared/trading-databricks-qa/{layer}/{component}")
 
-    with mlflow.start_run() as run:
+    run_name = f"{component}-{datetime.now(UTC):%Y%m%d-%H%M%S}"
+    with mlflow.start_run(run_name=run_name) as run:
         if params:
             mlflow.log_params(params)
-        mlflow.set_tags({"layer": layer, "component": component})
+        mlflow.set_tags({
+            "layer": layer,
+            "component": component,
+            "python.version": sys.version.split()[0],
+            **_git_tags(),
+        })
         try:
             yield run
             mlflow.set_tag("status", "pass")
@@ -144,10 +207,29 @@ def log_diag(name: str, df: pl.DataFrame | pl.LazyFrame, metrics: dict | None = 
         mlflow.log_metrics(metrics)
 
 def log_plotly(name: str, fig) -> None:
-    with tempfile.TemporaryDirectory() as tmpdir:
-        path = os.path.join(tmpdir, f"{name}.html")
-        fig.write_html(path)
-        mlflow.log_artifact(path, artifact_path="plots")
+    mlflow.log_text(
+        fig.to_html(full_html=False, include_plotlyjs="cdn"),
+        f"plots/{name}.html",
+    )
+
+
+def log_dataset(
+    df: pl.DataFrame,
+    name: str,
+    source: str,
+    context: str = "training",
+) -> None:
+    """Log dataset lineage to the active MLflow run.
+
+    Converts to pandas at the MLflow boundary (MLflow data API requires pandas).
+    Logs row/column counts as metrics for quick inspection in the UI.
+    """
+    dataset = mlflow.data.from_pandas(df.to_pandas(), source=source, name=name)
+    mlflow.log_input(dataset, context=context)
+    mlflow.log_metrics({
+        f"dataset.{name}.n_rows": df.height,
+        f"dataset.{name}.n_cols": len(df.columns),
+    })
 
 def log_sample(name: str, df: pl.DataFrame, n: int = 100) -> None:
     log_diag(name, df.head(n))
@@ -242,6 +324,149 @@ def build_heatmap(features: pl.DataFrame, corr: bool = True) -> go.Figure:
         pdf = pdf.corr()
     return px.imshow(pdf)
 
+def build_triple_barrier_chart(events: pl.DataFrame, labels: pl.DataFrame, bars: pl.DataFrame, n_samples: int = 5) -> go.Figure:
+    """Build a visualization showing price trajectories and triple barrier bounds for a sample of events."""
+    # Ensure data is loaded
+    events_df = events.collect() if isinstance(events, pl.LazyFrame) else events
+    labels_df = labels.collect() if isinstance(labels, pl.LazyFrame) else labels
+    bars_df = bars.collect() if isinstance(bars, pl.LazyFrame) else bars
+
+    # Join labels to events to get barrier levels and hit times
+    if "event_ts" in labels_df.columns:
+        # Align timezones if they differ
+        if events_df.schema["event_ts"] != labels_df.schema["event_ts"]:
+            # Drop timezone before join (safest cross-timezone approach in Polars)
+            e_df = events_df.with_columns(pl.col("event_ts").dt.replace_time_zone(None))
+            l_df = labels_df.with_columns(pl.col("event_ts").dt.replace_time_zone(None))
+            labeled_events = e_df.join(l_df, on="event_ts", how="inner")
+        else:
+            labeled_events = events_df.join(labels_df, on="event_ts", how="inner")
+    else:
+        # Fallback if label index is bar_index or something else
+        labeled_events = events_df.join(labels_df, left_on="bar_index", right_on="bar_index", how="inner")
+
+    # Sample a continuous subset
+    if labeled_events.height == 0:
+        return go.Figure()
+
+    # Take the first n_samples valid labeled events
+    sample = labeled_events.head(n_samples).to_pandas()
+
+    # Determine the time window for the chart + 10% margin
+    min_ts = sample["event_ts"].min()
+    max_ts = sample["matured_at"].max()
+
+    time_span = max_ts - min_ts
+    margin = time_span * 0.1 if time_span.total_seconds() > 0 else pd.Timedelta(hours=1)
+
+    start_window = min_ts - margin
+    end_window = max_ts + margin
+
+    # Ensure start/end window are timezone-aware if the bars DF is timezone-aware
+    if bars_df.schema["bar_end_time"].time_zone is not None:
+        if start_window.tzinfo is None:
+            start_window = start_window.tz_localize("UTC")
+            end_window = end_window.tz_localize("UTC")
+    else:
+        if start_window.tzinfo is not None:
+            start_window = start_window.tz_localize(None)
+            end_window = end_window.tz_localize(None)
+
+    # Filter bars to this window
+    window_bars = bars_df.filter(
+        (pl.col("bar_end_time") >= start_window) &
+        (pl.col("bar_end_time") <= end_window)
+    ).to_pandas()
+
+    fig = go.Figure()
+
+    # 1. Base trace: Close price
+    fig.add_trace(go.Scatter(
+        x=window_bars["bar_end_time"],
+        y=window_bars["close"],
+        mode="lines",
+        name="Close Price",
+        line=dict(color="#222222") # mc_dark_gray
+    ))
+
+    # 2. Entries (Buying points)
+    if "close_bar" in sample.columns:
+        entry_prices = sample["close_bar"]
+    else:
+        entry_prices = sample["bar_index"].apply(
+            lambda bi: window_bars.loc[window_bars["bar_index"] == bi, "close"].values[0]
+            if bi in window_bars["bar_index"].values else np.nan
+        )
+
+    fig.add_trace(go.Scatter(
+        x=sample["event_ts"],
+        y=entry_prices,
+        mode="markers",
+        name="CUSUM Event (Entry)",
+        marker=dict(color="#005eb8", size=10, symbol="triangle-up") # mc_blue
+    ))
+
+    # 3. Draw Barriers and Hit Markers for each event
+    for i, row in sample.iterrows():
+        entry_time = row["event_ts"]
+        entry_price = entry_prices.loc[i]
+        mature_time = row["matured_at"]
+        hit_type = row["barrier_hit"] # usually 1 (upper), -1 (lower), 0 (time)
+
+        # We need the barrier thresholds. Usually config is applied.
+        # For visualization, we can infer upper/lower from the return if barrier_hit != 0
+        # However, to be exact we rely on the hit price.
+        # Since we don't have the exact threshold levels in the return DF standardly,
+        # we will plot a horizontal line from entry to mature_time for the Hit price if hit.
+
+        hit_price = window_bars.loc[window_bars["bar_end_time"] == mature_time, "close"]
+        if not hit_price.empty:
+            hit_price = hit_price.values[0]
+        else:
+            hit_price = entry_price # fallback
+
+        # Upper/Lower/Time hit marker
+        color = "#a2aaad" # Default time barrier
+        name = "Time Barrier Hit"
+        if hit_type == 1:
+            color = "#005eb8" # Upper
+            name = "Take Profit Hit"
+        elif hit_type == -1:
+            color = "#f3c13a" # Lower
+            name = "Stop Loss Hit"
+
+        # Draw a dotted line to the hit point
+        fig.add_trace(go.Scatter(
+            x=[entry_time, mature_time],
+            y=[entry_price, hit_price],
+            mode="lines",
+            line=dict(color=color, width=1, dash="dot"),
+            showlegend=False
+        ))
+
+        # Draw the hit marker
+        fig.add_trace(go.Scatter(
+            x=[mature_time],
+            y=[hit_price],
+            mode="markers",
+            name=name,
+            marker=dict(color=color, size=12, symbol="x"),
+            showlegend=False # We'll just rely on colors, legend gets too cluttered if repeated
+        ))
+
+    # Add dummy traces for legend entries for the hit markers
+    fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#005eb8", size=12, symbol="x"), name="Take Profit Hit"))
+    fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#f3c13a", size=12, symbol="x"), name="Stop Loss Hit"))
+    fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker=dict(color="#a2aaad", size=12, symbol="x"), name="Time Barrier Hit"))
+
+    fig.update_layout(
+        title="Triple Barrier Labeling Trajectories",
+        xaxis_title="Time",
+        yaxis_title="Price"
+    )
+
+    return fig
+
 NODE_NAMES = ("context_retriever", "few_shot_retriever", "uncertainty_router", "causality_extractor", "mechanism_validator")
 
 def _raise_embed_error(text: str) -> list[float]:
@@ -316,5 +541,5 @@ def _prepare_local_graph_environment():
                 with patch("trading_databricks.agents.taxonomy.load_taxonomy", side_effect=mock_taxonomy):
                     with _patch_vs_index("success"):
                         # Patch embed_fn injection in graph to use graceful mock
-                        with patch("trading_databricks.agents.graph._mechanism_validator_node") as mock_validator:
+                        with patch("trading_databricks.agents.graph._mechanism_validator_node"):
                             yield

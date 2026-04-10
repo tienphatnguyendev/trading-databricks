@@ -3,6 +3,7 @@ ml/03_training_assembly.py — QA notebook for training dataset assembly.
 
 Run: uv run python notebooks/qa/ml/03_training_assembly.py
 """
+import mlflow
 import polars as pl
 
 from notebooks.qa.utils import (
@@ -10,6 +11,7 @@ from notebooks.qa.utils import (
     build_histogram,
     build_scatter,
     load_raw_dollar_bars,
+    log_dataset,
     log_diag,
     log_plotly,
     mlflow_component_run,
@@ -58,6 +60,7 @@ with mlflow_component_run(
 ):
     # Section 1 — Load input
     bars = load_raw_dollar_bars(symbol="BTCUSDT", limit=50_000)
+    log_dataset(bars, name="dollar_bars", source="trading-signal-gen-dev.gold.dollar_bars")
     events = detect_cusum_events(bars, config=CUSUMConfig(lookback_days=1))
     labels = compute_triple_barrier_labels(events, bars, config=config.label)
 
@@ -71,7 +74,6 @@ with mlflow_component_run(
     training_df = assemble_training_dataset(events.lazy(), labels.lazy(), feature_frames)
 
     # Log params discovered during execution
-    import mlflow
     mlflow.log_params({"input.n_events": events.height, "input.n_labels": labels.height})
 
     # Section 3 — Diagnostic tables

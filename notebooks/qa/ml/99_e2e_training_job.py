@@ -23,12 +23,14 @@ from notebooks.qa.utils import (
     build_histogram,
     build_label_distribution,
     build_scatter,
+    build_triple_barrier_chart,
     load_raw_dollar_bars,
+    log_dataset,
     log_diag,
     log_plotly,
     mlflow_component_run,
 )
-from trading_databricks.ml.config import MLPipelineConfig, TrainingConfig
+from trading_databricks.ml.config import CUSUMConfig, MLPipelineConfig, TrainingConfig
 from trading_databricks.ml.cusum import detect_cusum_events
 from trading_databricks.ml.labeling import compute_triple_barrier_labels
 from trading_databricks.ml.training.sample_weights import compute_sample_weights
@@ -36,6 +38,12 @@ from trading_databricks.ml.transformers.mlflow_model import TradingPipelineModel
 from trading_databricks.ml.transformers.pipeline import build_training_pipeline
 from trading_databricks.ml.transformers.search import build_hyperparameter_search
 
+mlflow.sklearn.autolog(
+    log_models=False,
+    log_input_examples=False,
+    silent=True,
+    max_tuning_runs=None,
+)
 
 def print_header(title: str):
     print(f"\n{'=' * 80}\n{title.upper()}\n{'=' * 80}")
@@ -50,7 +58,7 @@ def print_comparison(text: str):
 
 
 base_config = MLPipelineConfig()
-config = dataclasses.replace(base_config, training=TrainingConfig(n_iter_search=5))
+config = dataclasses.replace(base_config, training=TrainingConfig(n_iter_search=5), cusum=CUSUMConfig(lookback_days=1))
 
 with mlflow_component_run(
     layer="ml", component="e2e_training_job", params={"registry_push": "false"}
@@ -60,6 +68,7 @@ with mlflow_component_run(
     print_header("Step 1: Load Raw Dollar Bars")
     t0 = time.time()
     bars = load_raw_dollar_bars(symbol="BTCUSDT", limit=100_000)
+    log_dataset(bars, name="dollar_bars", source="trading-signal-gen-dev.gold.dollar_bars")
     durations["load"] = time.time() - t0
 
     print_observation(
@@ -168,6 +177,10 @@ with mlflow_component_run(
     avg_holding = (labels["matured_at"] - labels["event_ts"]).mean()
     print_observation(f"Average holding period for a labeled trade is {avg_holding}.")
 
+    # Visualize the triple barrier trajectories
+    log_plotly("step3_triple_barrier_trajectories", build_triple_barrier_chart(events, labels, bars, n_samples=5))
+    print_observation("Logged interactive triple barrier trajectories visualization showing price paths and barrier hits.")
+
     print_header("Step 4: Pipeline Assembly & Feature Extraction")
     t0 = time.time()
     weights = compute_sample_weights(labels)
@@ -191,7 +204,7 @@ with mlflow_component_run(
 
     # Extract features for correlation analysis
     features_union = pipeline.named_steps["features"]
-    features_df = features_union.transform(events)
+    features_df = features_union.fit_transform(events, bars=bars)
     numeric_features = features_df.select(
         [c for c in features_df.columns if features_df[c].dtype.is_numeric()]
     )
@@ -207,7 +220,7 @@ with mlflow_component_run(
     print_header("Step 5: Baseline Model Evaluation")
     t0 = time.time()
     y = labels["label"].to_numpy()
-    X = pipeline.named_steps["to_numpy"].transform(features_df)
+    X = pipeline.named_steps["to_numpy"].fit_transform(features_df)
 
     # Baseline 1: Dummy Classifier
     dummy = DummyClassifier(strategy="prior")

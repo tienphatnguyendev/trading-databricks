@@ -30,3 +30,6 @@ dist/
 .DS_Store
 .worktrees/
 .worktrees/
+
+# MLflow local tracking
+mlruns/
