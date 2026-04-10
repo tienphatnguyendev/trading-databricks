@@ -37,8 +37,8 @@ limit = int(dbutils.widgets.get("limit"))
 l1_category = dbutils.widgets.get("l1_category")
 
 print(f"Loading {limit} rows from smart-trading-dev.others.mas_training_dataset...")
-query = "SELECT * FROM `smart-trading-dev`.others.mas_training_dataset LIMIT :limit"
-df = spark.sql(query, args={"limit": limit})
+query = f"SELECT * FROM `smart-trading-dev`.others.mas_training_dataset LIMIT {limit}"
+df = spark.sql(query)
 pdf = df.toPandas()
 
 # Convert to list of MASState dicts for easier manual feeding to nodes
