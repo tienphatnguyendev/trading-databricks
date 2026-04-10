@@ -29,7 +29,7 @@ from notebooks.qa.utils import (
     log_plotly,
     mlflow_component_run,
 )
-from trading_databricks.ml.config import MLPipelineConfig, TrainingConfig
+from trading_databricks.ml.config import CUSUMConfig, MLPipelineConfig, TrainingConfig
 from trading_databricks.ml.cusum import detect_cusum_events
 from trading_databricks.ml.labeling import compute_triple_barrier_labels
 from trading_databricks.ml.training.sample_weights import compute_sample_weights
@@ -57,7 +57,7 @@ def print_comparison(text: str):
 
 
 base_config = MLPipelineConfig()
-config = dataclasses.replace(base_config, training=TrainingConfig(n_iter_search=5))
+config = dataclasses.replace(base_config, training=TrainingConfig(n_iter_search=5), cusum=CUSUMConfig(lookback_days=1))
 
 with mlflow_component_run(
     layer="ml", component="e2e_training_job", params={"registry_push": "false"}
@@ -199,7 +199,7 @@ with mlflow_component_run(
 
     # Extract features for correlation analysis
     features_union = pipeline.named_steps["features"]
-    features_df = features_union.transform(events)
+    features_df = features_union.fit_transform(events)
     numeric_features = features_df.select(
         [c for c in features_df.columns if features_df[c].dtype.is_numeric()]
     )
@@ -215,7 +215,7 @@ with mlflow_component_run(
     print_header("Step 5: Baseline Model Evaluation")
     t0 = time.time()
     y = labels["label"].to_numpy()
-    X = pipeline.named_steps["to_numpy"].transform(features_df)
+    X = pipeline.named_steps["to_numpy"].fit_transform(features_df)
 
     # Baseline 1: Dummy Classifier
     dummy = DummyClassifier(strategy="prior")
