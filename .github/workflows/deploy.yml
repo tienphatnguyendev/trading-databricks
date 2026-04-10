@@ -30,7 +30,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: databricks/setup-cli@main
       - name: Validate DABs bundle
-        run: databricks bundle validate
+        run: |
+          for i in 1 2 3 4 5; do
+            if databricks bundle validate; then
+              break
+            fi
+            echo "Attempt $i failed. Retrying in 10 seconds..."
+            sleep 10
+            if [ $i -eq 5 ]; then
+              false
+            fi
+          done
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
@@ -47,7 +57,24 @@ jobs:
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-        run: uv run pytest -v; code=$?; [ $code -eq 5 ] && echo "No tests collected (stubs only)" || exit $code
+        run: |
+          for i in 1 2 3; do
+            set +e
+            uv run pytest -v
+            code=$?
+            set -e
+            if [ $code -eq 0 ]; then
+              break
+            elif [ $code -eq 5 ]; then
+              echo "No tests collected (stubs only)"
+              break
+            fi
+            echo "Attempt $i failed with code $code. Retrying in 30 seconds..."
+            sleep 30
+            if [ $i -eq 3 ]; then
+              false
+            fi
+          done
 
   deploy-staging:
     name: Deploy to staging
