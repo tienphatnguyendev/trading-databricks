@@ -59,9 +59,10 @@ def main(catalog: str, bucket: str, limit: int):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Create static agent eval dataset")
-    parser.add_argument("--catalog", default="trading-signal-gen-dev", help="Target UC catalog")
+    parser.add_argument("--catalog", default="smart-trading-dev", help="Target UC catalog")
     parser.add_argument("--bucket", default="ai-trading-raw-ap-southeast-1", help="Source S3 bucket")
     parser.add_argument("--limit", type=int, default=500, help="Number of records to sample")
     
     args = parser.parse_args()
     main(args.catalog, args.bucket, args.limit)
+.limit)

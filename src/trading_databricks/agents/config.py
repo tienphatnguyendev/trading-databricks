@@ -36,9 +36,9 @@ class MASConfig:
     gatekeeper: GatekeeperConfig = field(default_factory=GatekeeperConfig)
     router: UncertaintyRouterConfig = field(default_factory=UncertaintyRouterConfig)
     validator: MechanismValidatorConfig = field(default_factory=MechanismValidatorConfig)
-    catalog: str = "trading-signal-gen-dev"
-    schema: str = "gold"
-    vs_index_name: str = "trading-signal-gen-dev.gold.causal_chains_idx"
+    catalog: str = "smart-trading-dev"
+    schema: str = "03_gold"
+    vs_index_name: str = "smart-trading-dev.03_gold.causal_chains_idx"
     vs_endpoint_name: str = "mas-few-shot"
-    llm_endpoint: str = "databricks-claude-sonnet"
+    llm_endpoint: str = "databricks-meta-llama-3-1-8b-instruct"
     agent_model_version: str = "v1.0"

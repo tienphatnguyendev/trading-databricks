@@ -39,7 +39,7 @@ def extract_data_to_polars(limit: int = 2_000_000) -> pl.DataFrame:
     print(f"Extracting {limit} rows from Delta to Polars...")
     
     # Read from the Dev Bronze table
-    df_spark = spark.table("`trading-signal-gen-dev`.`bronze`.`raw_aggtrades_samples`")
+    df_spark = spark.table("`smart-trading-dev`.`01_bronze`.`raw_aggtrades_samples`")
     
     # Filter corrupted timestamps and parse strings to actual types
     df_spark_clean = (

@@ -39,8 +39,8 @@ def provision_vs_infrastructure(env: str) -> None:
     # Create config (catalog and index name will be env-specific)
     if env == "dev":
         config = MASConfig(
-            catalog="trading-signal-gen-dev",
-            vs_index_name="trading-signal-gen-dev.gold.causal_chains_idx",
+            catalog="smart-trading-dev",
+            vs_index_name="smart-trading-dev.03_gold.causal_chains_idx",
         )
     elif env == "prod":
         config = MASConfig(

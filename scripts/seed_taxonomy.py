@@ -15,11 +15,11 @@ from trading_databricks.agents.taxonomy import seed_taxonomy
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--catalog", default="trading-signal-gen-dev")
-    parser.add_argument("--schema", default="gold")
+    parser.add_argument("--catalog", default="smart-trading-dev")
+    parser.add_argument("--schema", default="03_gold")
     args = parser.parse_args()
 
-    spark = DatabricksSession.builder.getOrCreate()
+    spark = DatabricksSession.builder.serverless(True).getOrCreate()
     seed_taxonomy(spark, catalog=args.catalog, schema=args.schema)
 
     taxonomy_count = spark.table(f"`{args.catalog}`.`{args.schema}`.treatment_taxonomy").count()
