@@ -10,6 +10,7 @@ Usage:
     # Production
     uv run python scripts/provision_vector_search.py --env prod
 """
+
 from __future__ import annotations
 
 import argparse
@@ -53,88 +54,64 @@ def provision_vs_infrastructure(env: str) -> None:
     logger.info(f"Provisioning VS infrastructure for environment: {env}")
     logger.info(f"Catalog: {config.catalog}, Schema: {config.schema}")
 
-    # Import Databricks MCP tools
-    try:
-        from databricks_vectorsearch.client import MCP_CLIENT
-        # Note: In practice, these are called via the Databricks MCP server
-        # For now, we provide a reference implementation that would be replaced
-        # with actual MCP tool invocations in the runtime environment
-        logger.debug("Databricks MCP tools imported successfully")
-    except ImportError:
-        logger.warning(
-            "Databricks MCP tools not available in this environment. "
-            "This script is designed to be run via Databricks MCP in a "
-            "Databricks workspace with proper authentication."
-        )
+    from databricks.connect import DatabricksSession
+    from databricks.sdk import WorkspaceClient
+    from databricks.sdk.service.vectorsearch import (
+        DeltaSyncVectorIndexSpecResponse,
+        EndpointType,
+    )
+
+    from trading_databricks.agents.schemas import CAUSAL_FEATURES_SCHEMA
+
+    w = WorkspaceClient()
+
+    # Ensure source table exists before index creation
+    logger.info("Ensuring source table exists...")
+    spark = DatabricksSession.builder.serverless(True).getOrCreate()
+    source_table = f"{config.catalog}.{config.schema}.news_causal_features"
+    spark.createDataFrame([], CAUSAL_FEATURES_SCHEMA).write.format("delta").option(
+        "mergeSchema", "true"
+    ).mode("ignore").saveAsTable(source_table)
 
     # Step 1: Create/update VS endpoint
     endpoint_name = config.vs_endpoint_name  # "mas-few-shot"
     logger.info(f"Step 1: Creating/updating VS endpoint: {endpoint_name}")
 
     try:
-        # In the actual Databricks MCP environment, this would invoke:
-        # mcp__databricks__create_or_update_vs_endpoint(
-        #     name=endpoint_name,
-        #     endpoint_type="STANDARD"
-        # )
-        logger.info(
-            f"  Would invoke: create_or_update_vs_endpoint("
-            f"name='{endpoint_name}', endpoint_type='STANDARD')"
+        logger.info(f"Creating/updating VS endpoint: {endpoint_name}...")
+        w.vector_search_endpoints.create_endpoint_and_wait(
+            name=endpoint_name, endpoint_type=EndpointType.STANDARD
         )
-        logger.info(f"  ✓ Endpoint '{endpoint_name}' ready (STANDARD type)")
+        logger.info(f"  ✓ Endpoint '{endpoint_name}' ready")
     except Exception as e:
         logger.error(f"Failed to create endpoint: {e}")
         raise
 
     # Step 2: Create/update VS Delta Sync index
-    source_table = f"{config.catalog}.{config.schema}.news_causal_features"
     index_name = config.vs_index_name
 
     logger.info(f"Step 2: Creating/updating VS index: {index_name}")
     logger.info(f"  Source table: {source_table}")
 
-    index_config = {
-        "name": index_name,
-        "endpoint_name": endpoint_name,
-        "primary_key": "story_id",
-        "index_type": "DELTA_SYNC",
-        "delta_sync_index_spec": {
-            "source_table": source_table,
-            "embedding_source_columns": [
-                {
-                    "name": "trigger_event",
-                    "embedding_model_endpoint_name": "databricks-gte-large-en",
-                }
-            ],
-            "pipeline_type": "TRIGGERED",
-            "columns_to_sync": [
-                "story_id",
-                "treatment_class",
-                "mechanism",
-                "expected_direction",
-                "confidence",
-                "trigger_event",
-                "causal_chain_json",
-                "validation_status",
-            ],
-        },
-    }
-
     try:
-        # In the actual Databricks MCP environment, this would invoke:
-        # mcp__databricks__create_or_update_vs_index(**index_config)
-        logger.info(
-            f"  Would invoke: create_or_update_vs_index("
-            f"name='{index_name}', "
-            f"endpoint_name='{endpoint_name}', "
-            f"primary_key='story_id', "
-            f"index_type='DELTA_SYNC', "
-            f"delta_sync_index_spec=...)"
+        logger.info(f"Creating/updating VS index: {index_name}...")
+        w.vector_search_indexes.create_index_and_wait(
+            name=index_name,
+            endpoint_name=endpoint_name,
+            primary_key="story_id",
+            index_type="DELTA_SYNC",
+            delta_sync_index_spec=DeltaSyncVectorIndexSpecResponse(
+                source_table=source_table,
+                embedding_source_columns=[
+                    {
+                        "name": "trigger_event",
+                        "embedding_model_endpoint_name": "databricks-gte-large-en",
+                    }
+                ],
+                pipeline_type="TRIGGERED",
+            ),
         )
-        logger.info(
-            f"  ✓ Index '{index_name}' configured (TRIGGERED sync, "
-            f"embedding_model=databricks-gte-large-en)"
-        )
+        logger.info(f"  ✓ Index '{index_name}' configured")
     except Exception as e:
         logger.error(f"Failed to create index: {e}")
         raise
@@ -146,8 +123,7 @@ def provision_vs_infrastructure(env: str) -> None:
         f"databricks vector-search endpoints get {endpoint_name}"
     )
     logger.info(
-        f"  Monitor index status: "
-        f"databricks vector-search indexes get {index_name}"
+        f"  Monitor index status: databricks vector-search indexes get {index_name}"
     )
 
     # Step 4: Summary
@@ -160,8 +136,8 @@ def provision_vs_infrastructure(env: str) -> None:
     logger.info(f"Endpoint:        {endpoint_name} (STANDARD type)")
     logger.info(f"Index:           {index_name}")
     logger.info(f"Source table:    {source_table}")
-    logger.info(f"Embedding model: databricks-gte-large-en")
-    logger.info(f"Sync mode:       TRIGGERED (manual refresh)")
+    logger.info("Embedding model: databricks-gte-large-en")
+    logger.info("Sync mode:       TRIGGERED (manual refresh)")
     logger.info("")
     logger.info("Next steps:")
     logger.info(
@@ -169,8 +145,7 @@ def provision_vs_infrastructure(env: str) -> None:
         "databricks vector-search endpoints get mas-few-shot"
     )
     logger.info(
-        "2. Verify index is READY: "
-        f"databricks vector-search indexes get {index_name}"
+        f"2. Verify index is READY: databricks vector-search indexes get {index_name}"
     )
     logger.info("3. Trigger initial sync after news_causal_features table is populated")
     logger.info("4. Test few-shot retrieval with sample headline")
