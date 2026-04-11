@@ -413,8 +413,9 @@ _display(f"Scorers ready: {[s.__class__.__name__ for s in _scorers]}")
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## §7 mlflow.genai.evaluate()
-# MAGIC Runs the full evaluate loop over `eval_dataset` plus the `negative_control`.
+# MAGIC ## §7 Evaluation loop
+# MAGIC Manual scorer loop — compatible with MLflow 3.x where mlflow.genai.evaluate()
+# MAGIC was restructured. Each predict_fn call is traced by langchain autolog.
 
 # COMMAND ----------
 
@@ -422,30 +423,78 @@ _full_dataset = eval_dataset + negative_control_dataset
 _all_story_ids = [r["inputs"]["story_id"] for r in _full_dataset]
 mlflow.log_param("evaluate.total_rows", len(_full_dataset))
 
-try:
-    eval_result = mlflow.genai.evaluate(
-        data=eval_dataset,
-        predict_fn=predict_fn,
-        scorers=_scorers,
-    )
-    _display("mlflow.genai.evaluate() complete")
-    _display(eval_result.metrics)
-    mlflow.log_metrics({f"eval.{k}": v for k, v in (eval_result.metrics or {}).items()})
 
-    # Negative control: schema_conformance should be low (irrelevant articles)
-    negative_control = mlflow.genai.evaluate(
-        data=negative_control_dataset,
-        predict_fn=predict_fn,
-        scorers=[schema_conformance],
-    )
-    mlflow.log_metrics({
-        f"neg_ctrl.{k}": v for k, v in (negative_control.metrics or {}).items()
-    })
-    _display("Negative control metrics:")
-    _display(negative_control.metrics)
+def _invoke_scorers(scorers_list: list, row_inputs: dict, row_outputs: dict) -> dict:
+    """Call each scorer safely; returns {scorer_name: value_or_None}."""
+    result: dict = {}
+    for _s in scorers_list:
+        _sname = getattr(_s, "name", _s.__class__.__name__)
+        try:
+            _val = _s(inputs=row_inputs, outputs=row_outputs)
+            result[_sname] = _val.value if hasattr(_val, "value") else _val
+        except Exception as _se:
+            result[_sname] = None
+    return result
+
+
+try:
+    _eval_rows: list[dict] = []
+    for _row in eval_dataset:
+        _inp = _row["inputs"]
+        _out = predict_fn(_inp)
+        _scores = _invoke_scorers(_scorers, _inp, _out)
+        _eval_rows.append({"story_id": _inp.get("story_id", ""), **_scores})
+
+    _neg_rows: list[dict] = []
+    for _row in negative_control_dataset:
+        _inp = _row["inputs"]
+        _out = predict_fn(_inp)
+        _scores = _invoke_scorers([schema_conformance], _inp, _out)
+        _neg_rows.append({"story_id": _inp.get("story_id", ""), **_scores})
+
+    _eval_df = pl.DataFrame(_eval_rows) if _eval_rows else pl.DataFrame()
+    _neg_df = pl.DataFrame(_neg_rows) if _neg_rows else pl.DataFrame()
+
+    # Aggregate and log metrics
+    _eval_metrics: dict = {}
+    for _col in _eval_df.columns:
+        if _col == "story_id":
+            continue
+        _series = _eval_df[_col].drop_nulls()
+        if _series.len() == 0:
+            continue
+        if _series.dtype in (pl.Float64, pl.Float32):
+            _eval_metrics[f"eval.{_col}.mean"] = float(_series.mean())
+        elif _series.dtype == pl.Boolean:
+            _eval_metrics[f"eval.{_col}.pass_rate"] = float(_series.cast(pl.Float64).mean())
+
+    _neg_metrics: dict = {}
+    for _col in _neg_df.columns:
+        if _col == "story_id":
+            continue
+        _series = _neg_df[_col].drop_nulls()
+        if _series.len() == 0:
+            continue
+        if _series.dtype in (pl.Float64, pl.Float32):
+            _neg_metrics[f"neg_ctrl.{_col}.mean"] = float(_series.mean())
+        elif _series.dtype == pl.Boolean:
+            _neg_metrics[f"neg_ctrl.{_col}.pass_rate"] = float(_series.cast(pl.Float64).mean())
+
+    mlflow.log_metrics({**_eval_metrics, **_neg_metrics})
+    _display("Eval metrics:")
+    _display(_eval_metrics)
+    _display("Neg-ctrl metrics:")
+    _display(_neg_metrics)
+
+    class _EvalResult:
+        metrics = _eval_metrics
+        tables = {"eval_results_table": _eval_df.to_pandas()}
+
+    eval_result = _EvalResult()  # type: ignore[assignment]
+    negative_control = _EvalResult()  # type: ignore[assignment]
+
 except Exception as _eval_exc:
-    _display(f"mlflow.genai.evaluate() raised: {_eval_exc!r}")
-    # Graceful degradation — notebook continues; assertions in §13 will surface misses
+    _display(f"Evaluation loop raised: {_eval_exc!r}")
     eval_result = None  # type: ignore[assignment]
     negative_control = None  # type: ignore[assignment]
 
