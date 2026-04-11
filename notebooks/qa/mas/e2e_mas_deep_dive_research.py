@@ -779,10 +779,11 @@ try:
     )
     for tid in unique_trace_ids:
         try:
+            # MLflow 3.x requires value or error; use False as "pending" placeholder
             mlflow.log_feedback(
                 trace_id=tid,
                 name="sme_verdict",
-                value=None,
+                value=False,
                 source=AssessmentSource(
                     source_type=AssessmentSourceType.HUMAN,
                     source_id="placeholder_sme",
