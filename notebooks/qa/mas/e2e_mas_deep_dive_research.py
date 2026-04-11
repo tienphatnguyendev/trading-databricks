@@ -1,5 +1,9 @@
 # Databricks notebook source
 
+# MAGIC %pip install -q -e .
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC # MAS E2E Deep-Dive Research Notebook
 # MAGIC
