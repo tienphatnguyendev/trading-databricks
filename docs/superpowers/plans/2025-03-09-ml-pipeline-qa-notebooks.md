@@ -31,11 +31,11 @@ logger = logging.getLogger(__name__)
 def load_dollar_bars(
     spark: SparkSession,
     symbol: str = "BTCUSDT",
-    catalog: str = "trading-signal-gen-dev",
+    catalog: str = "smart-trading-dev",
     limit: int = 100_000
 ) -> pl.DataFrame:
     """Safely loads dollar bars from gold into Polars for a specific symbol."""
-    table_name = f"{catalog}.gold.dollar_bars"
+    table_name = f"{catalog}.03_gold.dollar_bars"
     logger.info(f"Loading up to {limit} bars from {table_name} for {symbol}")
     
     df = spark.table(table_name).filter(f"symbol = '{symbol}'").orderBy("bar_index").limit(limit)
@@ -44,11 +44,11 @@ def load_dollar_bars(
 def load_raw_ticks(
     spark: SparkSession,
     symbol: str = "BTCUSDT",
-    catalog: str = "trading-signal-gen-dev",
+    catalog: str = "smart-trading-dev",
     limit: int = 500_000
 ) -> pl.DataFrame:
     """Safely loads raw ticks for dollar bar construction QA."""
-    table_name = f"{catalog}.bronze.raw_aggtrades_samples"
+    table_name = f"{catalog}.01_bronze.raw_aggtrades_samples"
     logger.info(f"Loading up to {limit} ticks from {table_name} for {symbol}")
     
     df = spark.table(table_name).filter(f"symbol = '{symbol}'").orderBy("timestamp").limit(limit)

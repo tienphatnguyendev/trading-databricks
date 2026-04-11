@@ -263,7 +263,7 @@ New article headline: "Mt. Gox trustee confirms July 2026 BTC distribution"
         ▼  embed via databricks-gte-large-en
 ┌───────────────────────────────────────────────────┐
 │  Vector Search Index:                              │
-│  trading-signal-gen-{env}.gold.causal_chains_idx   │
+│  trading-signal-gen-{env}.03_gold.causal_chains_idx   │
 │                                                    │
 │  Source: gold.news_causal_features                 │
 │  Filter: validation_status = 'accepted'            │
@@ -322,11 +322,11 @@ create_or_update_vs_endpoint("mas-few-shot", endpoint_type="STANDARD")
 **Delta Sync Index:**
 ```python
 create_or_update_vs_index(
-    name="{catalog}.gold.causal_chains_idx",
+    name="{catalog}.03_gold.causal_chains_idx",
     endpoint_name="mas-few-shot",
     primary_key="story_id",
     delta_sync_index_spec={
-        "source_table": "{catalog}.gold.news_causal_features",
+        "source_table": "{catalog}.03_gold.news_causal_features",
         "embedding_source_columns": [
             {
                 "name": "trigger_event",
@@ -346,7 +346,7 @@ create_or_update_vs_index(
 **Query at inference time:**
 ```python
 results = query_vs_index(
-    index_name="{catalog}.gold.causal_chains_idx",
+    index_name="{catalog}.03_gold.causal_chains_idx",
     columns=["treatment_class", "mechanism", "expected_direction",
              "causal_chain_json"],
     query_text=current_article_headline,

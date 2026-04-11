@@ -9,7 +9,7 @@ The QA notebooks operate as a hybrid tool. They leverage MLflow Tracing to recor
 ## Data Sources & Dependencies
 - **Dataset:** `smart-trading-dev.others.mas_training_dataset`
 - **Models:** `databricks-claude-sonnet` (Extractor), `databricks-gte-large-en` (Validator Embedding)
-- **Vector Search:** `trading-signal-gen-dev.gold.causal_chains_idx`
+- **Vector Search:** `smart-trading-dev.03_gold.causal_chains_idx`
 - **Libraries:** `pyspark.sql`, `mlflow`, `langgraph`, `spacy`
 
 ## Notebook Architecture & Modules

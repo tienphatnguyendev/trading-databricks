@@ -70,11 +70,11 @@ news-scraper-aws                 kinesis-tick-streamer
 
 | Catalog | Purpose |
 |---------|---------|
-| `trading-signal-gen-dev` | Local development, experimentation |
+| `smart-trading-dev` | Local development, experimentation |
 | `trading-signal-gen-staging` | Pre-prod validation, CI/CD target |
 | `trading-signal-prod` | Production pipelines |
 
-Each catalog has identical schemas: `bronze`, `silver`, `gold`.
+Each catalog has identical schemas: `01_bronze`, `silver`, `03_gold`.
 
 **Cross-account S3 access (provisioned, do not recreate):**
 1. IAM role (`databricks-s3-ingest-5dfcc`) in the AWS account — Databricks workspace can assume it

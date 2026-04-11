@@ -28,7 +28,7 @@ Each domain (`news/`, `ticks/`, `ml/`, `agents/`) has:
 This ensures transform logic is testable locally while SDP-specific decorators stay isolated.
 
 ### 3. Separate Schemas Per Layer
-Tables are written to separate Unity Catalog schemas: `{catalog}.bronze.*`, `{catalog}.silver.*`, `{catalog}.gold.*`. Schema-level access control lets downstream consumers query gold without touching bronze/silver.
+Tables are written to separate Unity Catalog schemas: `{catalog}.01_bronze.*`, `{catalog}.silver.*`, `{catalog}.03_gold.*`. Schema-level access control lets downstream consumers query gold without touching bronze/silver.
 
 ### 4. Serverless Compute
 All SDP pipelines use `serverless: true`. Classic cluster config (`clusters.yml`) is deleted. No node type, spot/on-demand, or runtime version to manage.

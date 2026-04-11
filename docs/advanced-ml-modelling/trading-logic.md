@@ -16,7 +16,7 @@ Market hours: 24/7, no holidays, no session breaks
 
 Data path: kinesis-tick-streamer -> S3 -> Auto Loader -> bronze.ticks_raw -> silver.ticks_cleaned -> gold.dollar_bars
 
-Unity Catalog: {catalog}.bronze.*, {catalog}.silver.*, {catalog}.gold.* where catalog = trading-signal-gen-dev | staging | prod
+Unity Catalog: {catalog}.01_bronze.*, {catalog}.silver.*, {catalog}.03_gold.* where catalog = smart-trading-dev | staging | prod
 
 CUSUM Event Detection (AFML Ch. 2)
 Standard time-based bars oversample quiet periods and undersample volatile ones. The platform uses CUSUM (cumulative sum) event detection on information-driven dollar bars to generate adaptive observation times.
