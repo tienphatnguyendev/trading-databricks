@@ -543,3 +543,299 @@ def _prepare_local_graph_environment():
                         # Patch embed_fn injection in graph to use graceful mock
                         with patch("trading_databricks.agents.graph._mechanism_validator_node"):
                             yield
+
+
+# ---------------------------------------------------------------------------
+# Deep-Dive Research Notebook helpers (Tasks 1-6)
+# These helpers are used by notebooks/qa/mas/e2e_mas_deep_dive_research.py
+# ---------------------------------------------------------------------------
+import re as _re  # noqa: E402
+
+_HEADLINE_PREFIX_RE = _re.compile(
+    r"^\s*Can you summarize the market impact of the following news:\s*",
+    flags=_re.IGNORECASE,
+)
+
+
+def _extract_headline(request: str | None) -> str:
+    """Strip the mas_training_dataset request prefix to derive a headline.
+
+    Falls back to the full request on no match. Returns empty string
+    on None input so downstream state-building is safe.
+    """
+    if not request:
+        return ""
+    return _HEADLINE_PREFIX_RE.sub("", request).strip()
+
+
+def _display(obj: object) -> None:
+    """Dual-run display: uses Databricks ``display`` builtin when available,
+    falls back to ``print`` under ``uv run python``.
+    """
+    try:
+        _display_fn = display  # type: ignore[name-defined]
+    except NameError:
+        print(obj)
+        return
+    _display_fn(obj)
+
+
+def _get_dbutils() -> object | None:
+    """Return a DBUtils instance when available (Databricks workspace),
+    otherwise None. Never raises.
+    """
+    try:
+        from pyspark.dbutils import DBUtils  # type: ignore[import]
+    except Exception:
+        return None
+    try:
+        spark = get_spark()
+        return DBUtils(spark)
+    except Exception:
+        return None
+
+
+# Lazy-imported SDK references so unit tests can patch at the module level.
+try:
+    from databricks.sdk import WorkspaceClient  # noqa: F401
+except Exception:  # pragma: no cover
+    WorkspaceClient = None  # type: ignore[assignment,misc]
+
+try:
+    from databricks.vector_search.client import VectorSearchClient  # noqa: F401
+except Exception:  # pragma: no cover
+    VectorSearchClient = None  # type: ignore[assignment,misc]
+
+
+def _endpoint_ready(endpoint_name: str) -> tuple[bool, str]:
+    """Return (ok, detail) for a Databricks Model Serving endpoint."""
+    try:
+        if WorkspaceClient is None:
+            return False, "databricks-sdk not installed"
+        client = WorkspaceClient()
+        ep = client.serving_endpoints.get(endpoint_name)
+        ready = getattr(getattr(ep, "state", None), "ready", None)
+        ok = "READY" in str(ready).upper()
+        return ok, f"state.ready={ready}"
+    except Exception as e:
+        return False, repr(e)
+
+
+def _table_has_rows(fqn: str) -> tuple[bool, str]:
+    """Return (ok, detail) for a Unity Catalog table; ok iff ≥ 1 row visible."""
+    try:
+        spark = get_spark()
+        count = spark.table(fqn).limit(1).count()
+        ok = count > 0
+        return ok, f"visible_rows>=1 ({count})"
+    except Exception as e:
+        return False, repr(e)
+
+
+def _vs_index_exists(*, endpoint_name: str, index_name: str) -> tuple[bool, str]:
+    """Return (ok, detail) for a Databricks Vector Search index."""
+    try:
+        if VectorSearchClient is None:
+            return False, "databricks-vectorsearch not installed"
+        vsc = VectorSearchClient()
+        idx = vsc.get_index(endpoint_name=endpoint_name, index_name=index_name)
+        desc = idx.describe()
+        return True, f"describe_ok ({type(desc).__name__})"
+    except Exception as e:
+        return False, repr(e)
+
+
+def _stratified_sample(
+    df: pl.DataFrame,
+    *,
+    n: int,
+    by: str,
+    seed: int,
+) -> pl.DataFrame:
+    """Seeded stratified sample of ``df`` by column ``by``, returning up to ``n`` rows.
+
+    Allocates proportionally to each bucket's share, with a floor of 1 per
+    bucket. If ``n >= df.height``, returns the full frame untouched (still
+    seeded for deterministic downstream operations).
+    """
+    if n >= df.height:
+        return df
+
+    bucket_counts = df.group_by(by).len().sort(by)
+    total = df.height
+    parts: list[pl.DataFrame] = []
+    remaining = n
+    buckets = bucket_counts.to_dicts()
+    for i, row in enumerate(buckets):
+        bucket_value = row[by]
+        bucket_size = int(row["len"])
+        if i == len(buckets) - 1:
+            take = remaining
+        else:
+            take = max(1, round(n * bucket_size / total))
+            take = min(take, bucket_size, remaining - (len(buckets) - i - 1))
+            take = max(take, 0)
+        if take <= 0:
+            continue
+        slice_df = df.filter(pl.col(by) == bucket_value).sample(
+            n=min(take, bucket_size), seed=seed, shuffle=True,
+        )
+        parts.append(slice_df)
+        remaining -= slice_df.height
+    return pl.concat(parts) if parts else df.head(0)
+
+
+def build_instrumented_mas_graph(config: object) -> object:
+    """Compile the 5-node MAS graph with every node wrapped in mlflow.trace.
+
+    Topology mirrors trading_databricks.agents.graph.build_mas_graph exactly
+    but guarantees per-node CHAIN spans for §8 real-latency analysis.
+    Production node code is unchanged.
+    """
+    from langgraph.graph import StateGraph
+    from mlflow.entities import SpanType
+
+    from trading_databricks.agents.graph import (
+        _mechanism_validator_node,
+        route_article,
+    )
+    from trading_databricks.agents.nodes import (
+        causality_extractor,
+        context_retriever,
+        few_shot_retriever,
+        uncertainty_router,
+    )
+    from trading_databricks.agents.state import MASState
+
+    def _traced(name: str, fn: object) -> object:
+        @mlflow.trace(name=name, span_type=SpanType.CHAIN)
+        def _wrapper(state: object) -> object:
+            return fn(state)  # type: ignore[operator]
+        _wrapper.__name__ = f"traced_{name}"
+        return _wrapper
+
+    graph = StateGraph(MASState)
+    graph.add_node("context_retriever",   _traced("context_retriever",   lambda s: context_retriever(s, config=config)))
+    graph.add_node("few_shot_retriever",  _traced("few_shot_retriever",  lambda s: few_shot_retriever(s, config=config)))
+    graph.add_node("uncertainty_router",  _traced("uncertainty_router",  lambda s: uncertainty_router(s, config=config)))
+    graph.add_node("causality_extractor", _traced("causality_extractor", lambda s: causality_extractor(s, config=config)))
+    graph.add_node("mechanism_validator", _traced("mechanism_validator", lambda s: _mechanism_validator_node(s, config)))
+
+    graph.set_entry_point("context_retriever")
+    graph.add_edge("context_retriever",   "few_shot_retriever")
+    graph.add_edge("few_shot_retriever",  "uncertainty_router")
+    graph.add_conditional_edges(
+        "uncertainty_router",
+        route_article,
+        {"causality_extractor": "causality_extractor"},
+    )
+    graph.add_edge("causality_extractor", "mechanism_validator")
+    graph.set_finish_point("mechanism_validator")
+    return graph.compile()
+
+
+@contextmanager
+def wire_graph_environment(config: object, *, offline: bool):  # type: ignore[return]
+    """Patch runtime hooks so the MAS graph can execute from a notebook.
+
+    Live mode (offline=False):
+      - Replaces ``get_spark_session`` placeholders with a Databricks Connect session
+      - Replaces ``query_vs_index`` placeholder with a real VectorSearchClient call
+
+    Offline mode (offline=True):
+      - All of the above with deterministic mocks
+      - Additionally patches mlflow.deployments get_deploy_client.predict to return
+        taxonomy-compliant JSON (LLM) or a fixed unit vector (embeddings)
+
+    The ``_mechanism_validator_node`` is NEVER patched in any mode — the real
+    deterministic validation logic runs on every row.
+    """
+    import json as _json
+    from unittest.mock import patch as _patch
+    import importlib
+    
+    _ce_mod = importlib.import_module("trading_databricks.agents.nodes.causality_extractor")
+    _fsr_mod = importlib.import_module("trading_databricks.agents.nodes.few_shot_retriever")
+
+    patches: list = []
+
+    patches.append(_patch.object(_fsr_mod, "get_spark_session", get_spark))
+    patches.append(_patch.object(_ce_mod, "get_spark_session", get_spark))
+
+    if offline:
+        def _mock_vs_query(**kwargs: object) -> list[dict]:
+            return [
+                {"story_id": "mock-1", "treatment_class": "Regulation.etf_ruling",
+                 "mechanism": "institutional_access", "expected_direction": "bullish",
+                 "confidence": 0.9, "trigger_event": "mock trigger",
+                 "causal_chain_json": "{}", "similarity_score": 0.9},
+                {"story_id": "mock-2", "treatment_class": "Macro.rate_decision",
+                 "mechanism": "liquidity_contraction", "expected_direction": "bearish",
+                 "confidence": 0.8, "trigger_event": "mock trigger 2",
+                 "causal_chain_json": "{}", "similarity_score": 0.7},
+            ]
+        patches.append(_patch.object(_fsr_mod, "query_vs_index", _mock_vs_query))
+
+        llm_endpoint = config.llm_endpoint  # type: ignore[attr-defined]
+        embed_endpoint = config.validator.embedding_model  # type: ignore[attr-defined]
+
+        _mock_json = _json.dumps({
+            "treatment_class": "Macro.rate_decision",
+            "mechanism": "liquidity_contraction",
+            "expected_direction": "bearish",
+            "confidence": 0.8,
+            "trigger_event": "mock trigger event",
+            "evidence_spans": ["mock evidence"],
+            "reasoning": "deterministic offline mock",
+        })
+
+        class _MockDeployClient:
+            def predict(self, *, endpoint: str, inputs: dict) -> dict:
+                if endpoint == embed_endpoint:
+                    return {"data": [{"embedding": [1.0, 0.0, 0.0]}]}
+                if endpoint == llm_endpoint:
+                    n = int(inputs.get("n", 1))
+                    return {
+                        "choices": [
+                            {"message": {"content": _mock_json}} for _ in range(n)
+                        ]
+                    }
+                raise RuntimeError(f"Unexpected offline endpoint: {endpoint}")
+
+        patches.append(
+            _patch("mlflow.deployments.get_deploy_client", return_value=_MockDeployClient())
+        )
+    else:
+        import json as _json2
+
+        def _real_vs_query(**kwargs: object) -> list[dict]:
+            vsc = VectorSearchClient()
+            idx = vsc.get_index(
+                endpoint_name=config.vs_endpoint_name,  # type: ignore[attr-defined]
+                index_name=kwargs["index_name"],  # type: ignore[index]
+            )
+            raw = idx.similarity_search(
+                query_text=kwargs["query_text"],  # type: ignore[index]
+                columns=kwargs["columns"],  # type: ignore[index]
+                num_results=kwargs["num_results"],  # type: ignore[index]
+                filters=_json2.loads(kwargs["filters_json"]),  # type: ignore[index]
+            )
+            rows = raw.get("result", {}).get("data_array", []) or []
+            cols = kwargs["columns"]  # type: ignore[index]
+            out: list[dict] = []
+            for row in rows:
+                rec = {col: row[i] for i, col in enumerate(cols)}
+                if len(row) > len(cols):
+                    rec["similarity_score"] = row[len(cols)]
+                out.append(rec)
+            return out
+
+        patches.append(_patch.object(_fsr_mod, "query_vs_index", _real_vs_query))
+
+    for p in patches:
+        p.start()
+    try:
+        yield
+    finally:
+        for p in patches:
+            p.stop()

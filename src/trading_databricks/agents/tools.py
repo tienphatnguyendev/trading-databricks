@@ -99,7 +99,7 @@ def fetch_mechanism_whitelist(*, config: MASConfig | None = None) -> str:
     if config is None:
         config = MASConfig()
     spark = get_spark_session()
-    rows = spark.table(f"{config.catalog}.{config.schema}.mechanism_whitelist").collect()
+    rows = spark.table(f"`{config.catalog}`.{config.schema}.mechanism_whitelist").collect()
     return json.dumps([row.asDict() for row in rows])
 
 

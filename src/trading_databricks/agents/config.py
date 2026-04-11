@@ -40,5 +40,5 @@ class MASConfig:
     schema: str = "gold"
     vs_index_name: str = "trading-signal-gen-dev.gold.causal_chains_idx"
     vs_endpoint_name: str = "mas-few-shot"
-    llm_endpoint: str = "databricks-claude-sonnet"
+    llm_endpoint: str = "databricks-meta-llama-3-1-8b-instruct"
     agent_model_version: str = "v1.0"
