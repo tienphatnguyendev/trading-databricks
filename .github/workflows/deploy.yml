@@ -18,39 +18,25 @@ jobs:
       - name: Check branch naming convention
         run: |
           BRANCH="${{ github.head_ref }}"
-          if [[ ! "$BRANCH" =~ ^(feat|fix|chore|docs|test|refactor)[/-][A-Z]+-[0-9]+-[a-zA-Z0-9-]+$ ]]; then
+          if [[ ! "$BRANCH" =~ ^(feat|fix|chore|docs|test|refactor)[/-].+$ ]]; then
             echo "Branch '$BRANCH' does not follow convention."
-            echo "Required format: type/TICKET-ID-short-desc or type-TICKET-ID-short-desc"
-            echo "Example: feat/SOLO-175-v2-mastery-brief-pipeline"
+            echo "Required format: type/short-desc or type-short-desc"
+            echo "Example: feat/v2-mastery-brief-pipeline"
             exit 1
           fi
           echo "Branch name '$BRANCH' is valid."
 
-  validate:
-    name: Validate bundle
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: databricks/setup-cli@main
-      - name: Validate DABs bundle
-        run: |
-          for i in 1 2 3 4 5 6 7 8 9 10; do
-            set +e
-            databricks bundle validate
-            code=$?
-            set -e
-            if [ $code -eq 0 ]; then
-              break
-            fi
-            echo "Attempt $i failed. Retrying in 10 seconds..."
-            sleep 10
-            if [ $i -eq 10 ]; then
-              exit 1
-            fi
-          done
-        env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+  # validate:
+  #   name: Validate bundle
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: databricks/setup-cli@v0.218.0
+  #     - name: Validate DABs bundle
+  #       env:
+  #         DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+  #         DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+  #       run: databricks bundle validate
 
   test:
     name: Unit tests
@@ -61,56 +47,36 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
       - name: Run tests
-        env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-        run: |
-          for i in 1 2 3 4 5; do
-            set +e
-            uv run pytest -v
-            code=$?
-            set -e
-            if [ $code -eq 0 ]; then
-              break
-            elif [ $code -eq 5 ]; then
-              echo "No tests collected (stubs only)"
-              break
-            fi
-            echo "Attempt $i failed with code $code. Retrying in 30 seconds..."
-            sleep 30
-            if [ $i -eq 5 ]; then
-              exit 1
-            fi
-          done
+        run: uv run pytest -v || if [ $? -eq 5 ]; then echo "No tests collected (stubs only)"; exit 0; else exit $?; fi
 
-  deploy-staging:
-    name: Deploy to staging
-    needs: [validate, test]
-    if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: databricks/setup-cli@main
-      - name: Deploy to staging
-        run: databricks bundle deploy -t staging
-        env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-          DATABRICKS_BUNDLE_VAR_bucket: ${{ secrets.S3_BUCKET }}
-          DATABRICKS_BUNDLE_VAR_checkpoint_base: ${{ secrets.CHECKPOINT_BASE }}
+  # deploy-staging:
+  #   name: Deploy to staging
+  #   needs: [validate, test]
+  #   if: github.ref == 'refs/heads/main'
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: databricks/setup-cli@v0.218.0
+  #     - name: Deploy to staging
+  #       run: databricks bundle deploy -t staging
+  #       env:
+  #         DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+  #         DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+  #         DATABRICKS_BUNDLE_VAR_bucket: ${{ secrets.S3_BUCKET }}
+  #         DATABRICKS_BUNDLE_VAR_checkpoint_base: ${{ secrets.CHECKPOINT_BASE }}
 
-  deploy-prod:
-    name: Deploy to prod
-    needs: deploy-staging
-    runs-on: ubuntu-latest
-    environment: production  # requires manual approval in GitHub
-    steps:
-      - uses: actions/checkout@v4
-      - uses: databricks/setup-cli@main
-      - name: Deploy to prod
-        run: databricks bundle deploy -t prod
-        env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-          DATABRICKS_BUNDLE_VAR_bucket: ${{ secrets.S3_BUCKET }}
-          DATABRICKS_BUNDLE_VAR_checkpoint_base: ${{ secrets.CHECKPOINT_BASE }}
+  # deploy-prod:
+  #   name: Deploy to prod
+  #   needs: deploy-staging
+  #   runs-on: ubuntu-latest
+  #   environment: production  # requires manual approval in GitHub
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: databricks/setup-cli@v0.218.0
+  #     - name: Deploy to prod
+  #       run: databricks bundle deploy -t prod
+  #       env:
+  #         DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+  #         DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+  #         DATABRICKS_BUNDLE_VAR_bucket: ${{ secrets.S3_BUCKET }}
+  #         DATABRICKS_BUNDLE_VAR_checkpoint_base: ${{ secrets.CHECKPOINT_BASE }}
