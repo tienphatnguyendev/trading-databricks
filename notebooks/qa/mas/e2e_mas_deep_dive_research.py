@@ -508,8 +508,13 @@ except Exception as _eval_exc:
 # COMMAND ----------
 
 try:
+    # MLflow 3.x search_traces uses experiment_ids, not experiment_names
+    _exp = mlflow.get_experiment_by_name(
+        "/Shared/trading-databricks-qa/mas/e2e_deep_dive_research"
+    )
+    _exp_ids = [_exp.experiment_id] if _exp else []
     traces_df = mlflow.search_traces(
-        experiment_names=["/Shared/trading-databricks-qa/mas/e2e_deep_dive_research"],
+        experiment_ids=_exp_ids or None,
         max_results=len(_full_dataset) + 50,
         extract_fields=["spans"],
     )
@@ -685,7 +690,7 @@ if judge_col_candidates:
 # COMMAND ----------
 
 dbu = _get_dbutils()
-if dbu is not None:
+if dbu is not None and hasattr(dbu, "widgets"):
     dbu.widgets.text("story_id", "", "story_id to replay")
     dbu.widgets.text("override_headline", "", "override headline (optional)")
     dbu.widgets.text("override_body", "", "override body (optional)")
