@@ -615,7 +615,8 @@ def _endpoint_ready(endpoint_name: str) -> tuple[bool, str]:
         client = WorkspaceClient()
         ep = client.serving_endpoints.get(endpoint_name)
         ready = getattr(getattr(ep, "state", None), "ready", None)
-        ok = "READY" in str(ready).upper()
+        ready_str = str(ready).upper()
+        ok = "READY" in ready_str and "NOT_READY" not in ready_str
         return ok, f"state.ready={ready}"
     except Exception as e:
         return False, repr(e)
