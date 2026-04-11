@@ -33,7 +33,7 @@ spark = SparkSession.builder.getOrCreate()
 # COMMAND ----------
 def load_eval_dataset(limit: int = 5) -> pd.DataFrame:
     """Loads the news agent eval dataset for testing."""
-    df = spark.table("`trading-signal-gen-dev`.`bronze`.`news_agent_eval_dataset`")
+    df = spark.table("`smart-trading-dev`.`01_bronze`.`news_agent_eval_dataset`")
     return df.limit(limit).toPandas()
 
 # COMMAND ----------

@@ -582,7 +582,7 @@ from trading_databricks.agents.taxonomy import load_whitelist
 # One-time load at graph initialization (not per article)
 whitelist = load_whitelist(
     spark,
-    catalog="trading-signal-gen-dev",
+    catalog="smart-trading-dev",
     schema="gold",
 )  # Returns: dict[tuple[str, str], list[str]]
 
@@ -945,7 +945,7 @@ After implementation, verify correctness via:
    from trading_databricks.agents.taxonomy import load_whitelist
    from trading_databricks.agents.config import MechanismValidatorConfig
    
-   whitelist = load_whitelist(spark, catalog="trading-signal-gen-dev", schema="gold")
+   whitelist = load_whitelist(spark, catalog="smart-trading-dev", schema="gold")
    
    extraction = {
        "treatment_class": "Regulation.etf_ruling",

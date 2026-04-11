@@ -65,9 +65,9 @@ Four `@dataclass(frozen=True)` classes. All defaults match spec values exactly. 
 | `gatekeeper` | `GatekeeperConfig` | `field(default_factory=GatekeeperConfig)` |
 | `router` | `UncertaintyRouterConfig` | `field(default_factory=UncertaintyRouterConfig)` |
 | `validator` | `MechanismValidatorConfig` | `field(default_factory=MechanismValidatorConfig)` |
-| `catalog` | `str` | `"trading-signal-gen-dev"` |
+| `catalog` | `str` | `"smart-trading-dev"` |
 | `schema` | `str` | `"gold"` |
-| `vs_index_name` | `str` | `"trading-signal-gen-dev.gold.causal_chains_idx"` |
+| `vs_index_name` | `str` | `"smart-trading-dev.03_gold.causal_chains_idx"` |
 | `vs_endpoint_name` | `str` | `"mas-few-shot"` |
 | `llm_endpoint` | `str` | `"databricks-claude-sonnet"` |
 | `agent_model_version` | `str` | `"v1.0"` |
@@ -312,11 +312,11 @@ Both `load_*` functions call `.collect()` — tables are small reference data, n
 uv run pytest tests/agents/ -v
 
 # Databricks Connect — seeds dev catalog
-uv run python scripts/seed_taxonomy.py --catalog trading-signal-gen-dev --schema gold
+uv run python scripts/seed_taxonomy.py --catalog smart-trading-dev --schema gold
 
 # SQL verification post-seed
-SELECT COUNT(*) FROM `trading-signal-gen-dev`.gold.treatment_taxonomy;   -- 34
-SELECT COUNT(*) FROM `trading-signal-gen-dev`.gold.mechanism_whitelist;  -- 40
-SELECT treatment_l1, COUNT(*) FROM `trading-signal-gen-dev`.gold.mechanism_whitelist
+SELECT COUNT(*) FROM `smart-trading-dev`.03_gold.treatment_taxonomy;   -- 34
+SELECT COUNT(*) FROM `smart-trading-dev`.03_gold.mechanism_whitelist;  -- 40
+SELECT treatment_l1, COUNT(*) FROM `smart-trading-dev`.03_gold.mechanism_whitelist
   GROUP BY 1 ORDER BY 1;                                                  -- 5 per L1
 ```

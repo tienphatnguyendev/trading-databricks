@@ -91,11 +91,11 @@ class TestMASConfig:
 
     def test_scalar_defaults(self):
         cfg = MASConfig()
-        assert cfg.catalog == "trading-signal-gen-dev"
-        assert cfg.schema == "gold"
-        assert cfg.vs_index_name == "trading-signal-gen-dev.gold.causal_chains_idx"
+        assert cfg.catalog == "smart-trading-dev"
+        assert cfg.schema == "03_gold"
+        assert cfg.vs_index_name == "smart-trading-dev.03_gold.causal_chains_idx"
         assert cfg.vs_endpoint_name == "mas-few-shot"
-        assert cfg.llm_endpoint == "databricks-claude-sonnet"
+        assert cfg.llm_endpoint == "databricks-meta-llama-3-1-8b-instruct"
         assert cfg.agent_model_version == "v1.0"
 
     def test_frozen(self):

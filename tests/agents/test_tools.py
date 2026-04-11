@@ -40,7 +40,7 @@ def test_fetch_mechanism_whitelist_returns_json_string(mock_spark: MagicMock) ->
     assert parsed[1]["mechanism"] == "liquidity_contraction"
 
     mock_spark_instance.table.assert_called_once_with(
-        "trading-signal-gen-dev.gold.mechanism_whitelist"
+        "smart-trading-dev.03_gold.mechanism_whitelist"
     )
 
 

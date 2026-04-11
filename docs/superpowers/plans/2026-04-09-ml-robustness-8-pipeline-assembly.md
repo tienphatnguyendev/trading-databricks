@@ -405,7 +405,7 @@ def run_training_job(config: MLPipelineConfig | None = None) -> dict:
     mlflow.set_registry_uri("databricks-uc")
     
     # 1. Load bars
-    table_name = f"{config.catalog}.gold.dollar_bars"
+    table_name = f"{config.catalog}.03_gold.dollar_bars"
     logger.info(f"Loading bars from {table_name}")
     try:
         bars_df = spark.read.table(table_name)

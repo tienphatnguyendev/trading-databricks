@@ -68,8 +68,9 @@ def main(catalog: str, file_path: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Create static bronze tick eval dataset")
-    parser.add_argument("--catalog", default="trading-signal-gen-dev", help="Target UC catalog")
-    parser.add_argument("--file_path", default="/Volumes/trading-signal-gen-dev/default/uploads/BTCUSDT-aggTrades-2026-02.csv", help="Path to source CSV file in Volume")
+    parser.add_argument("--catalog", default="smart-trading-dev", help="Target UC catalog")
+    parser.add_argument("--file_path", default="/Volumes/smart-trading-dev/default/uploads/BTCUSDT-aggTrades-2026-02.csv", help="Path to source CSV file in Volume")
     
     args, unknown = parser.parse_known_args()
     main(args.catalog, args.file_path)
+s.file_path)

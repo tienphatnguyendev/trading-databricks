@@ -133,7 +133,7 @@ https://data.binance.vision/data/spot/monthly/aggTrades/BTCUSDT/BTCUSDT-aggTrade
 **Ingestion workflow (UC Volume approach):**
 
 1. Download 6 ZIPs via `requests` in a Databricks notebook
-2. Upload raw ZIPs to UC Volume: `Volumes/trading-signal-gen-dev/bronze/binance_raw/`
+2. Upload raw ZIPs to UC Volume: `Volumes/smart-trading-dev/bronze/binance_raw/`
 3. Unzip and read CSVs with Spark, apply transform:
    - `timestamp`: Unix millis → ISO-8601 TIMESTAMP via `F.from_unixtime(F.col("timestamp") / 1000)`
    - `side`: `is_buyer_maker` → "buy" (False) / "sell" (True)
@@ -392,8 +392,8 @@ mlflow.set_registry_uri("databricks-uc")
 
 | Component | Path | Aliases |
 |---|---|---|
-| Primary model | `trading-signal-gen-{env}.gold.btc_primary_model` | `Champion`, `Challenger` |
-| Meta-label model | `trading-signal-gen-{env}.gold.btc_meta_label_model` | `Champion`, `Challenger` |
+| Primary model | `trading-signal-gen-{env}.03_gold.btc_primary_model` | `Champion`, `Challenger` |
+| Meta-label model | `trading-signal-gen-{env}.03_gold.btc_meta_label_model` | `Champion`, `Challenger` |
 
 **Experiment names:**
 - `/trading-databricks/btc-primary-training`
@@ -443,7 +443,7 @@ with mlflow.start_run(run_name="primary-rf-v1") as run:
         sk_model=model,
         artifact_path="model",
         input_example=X_train.iloc[[0]],
-        registered_model_name=f"trading-signal-gen-{env}.gold.btc_primary_model",
+        registered_model_name=f"trading-signal-gen-{env}.03_gold.btc_primary_model",
     )
 ```
 
@@ -497,12 +497,12 @@ client = MlflowClient()
 
 if all_gates_pass:
     client.set_registered_model_alias(
-        f"trading-signal-gen-{env}.gold.btc_primary_model",
+        f"trading-signal-gen-{env}.03_gold.btc_primary_model",
         "Champion",
         new_version,
     )
     client.set_registered_model_alias(
-        f"trading-signal-gen-{env}.gold.btc_meta_label_model",
+        f"trading-signal-gen-{env}.03_gold.btc_meta_label_model",
         "Champion",
         meta_version,
     )
@@ -512,10 +512,10 @@ if all_gates_pass:
 
 ```python
 primary = mlflow.pyfunc.load_model(
-    f"models:/trading-signal-gen-{env}.gold.btc_primary_model@Champion"
+    f"models:/trading-signal-gen-{env}.03_gold.btc_primary_model@Champion"
 )
 meta = mlflow.pyfunc.load_model(
-    f"models:/trading-signal-gen-{env}.gold.btc_meta_label_model@Champion"
+    f"models:/trading-signal-gen-{env}.03_gold.btc_meta_label_model@Champion"
 )
 ```
 
