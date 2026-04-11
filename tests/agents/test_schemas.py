@@ -1,7 +1,7 @@
 """Tests for trading_databricks.agents.schemas StructType constants."""
 from __future__ import annotations
 
-from pyspark.sql.types import ArrayType, DecimalType, StringType
+from pyspark.sql.types import ArrayType, DecimalType, DoubleType, StringType
 
 from trading_databricks.agents.schemas import (
     CAUSAL_FEATURES_SCHEMA,
@@ -35,10 +35,10 @@ def test_causal_features_non_nullable_fields():
     }
 
 
-def test_dollar_bar_close_is_decimal_type():
+def test_dollar_bar_close_is_double_type():
     field = next(f for f in CAUSAL_FEATURES_SCHEMA.fields if f.name == "dollar_bar_close")
-    assert isinstance(field.dataType, DecimalType)
-    assert field.dataType == DecimalType(18, 8)
+    assert isinstance(field.dataType, DoubleType)
+    assert field.dataType == DoubleType()
     assert field.nullable is True
 
 

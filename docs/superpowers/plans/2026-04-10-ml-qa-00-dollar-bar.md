@@ -32,7 +32,7 @@ from trading_databricks.ml.validation import validate_bars
 
 # TRD-5 Blocker Check
 try:
-    from trading_databricks.ticks.gold.dollar_bars import build_dollar_bars
+    from trading_databricks.ticks.03_gold.dollar_bars import build_dollar_bars
 except Exception:
     pass
 

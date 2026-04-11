@@ -73,7 +73,7 @@ def test_feature_config_defaults():
 def test_ml_pipeline_config_composition():
     cfg = MLPipelineConfig()
     assert cfg.symbol == "BTCUSDT"
-    assert cfg.catalog == "trading-signal-gen-dev"
+    assert cfg.catalog == "smart-trading-dev"
     assert isinstance(cfg.cusum, CUSUMConfig)
     assert isinstance(cfg.feature, FeatureConfig)
 
@@ -149,7 +149,7 @@ class MLPipelineConfig:
     training: TrainingConfig = field(default_factory=TrainingConfig)
     inference: InferenceConfig = field(default_factory=InferenceConfig)
     symbol: str = "BTCUSDT"
-    catalog: str = "trading-signal-gen-dev"
+    catalog: str = "smart-trading-dev"
 ```
 
 - [ ] **Step 4: Run test to verify it passes**

@@ -11,14 +11,14 @@ Databricks transformation & feature engineering for the algorithmic trading syst
 **This repo reads from S3 — it never writes to it.**
 
 **Current stage sample datasets** (must use these for ML & MAS development):
-- `trading-signal-gen-dev.bronze.news_agent_eval_dataset`
-- `trading-signal-gen-dev.bronze.raw_aggtrades_samples`
+- `smart-trading-dev.01_bronze.news_agent_eval_dataset`
+- `smart-trading-dev.01_bronze.raw_aggtrades_samples`
 
 ## 🔍 First Thing Every Session
 
 Before writing any code, orient yourself. This takes 2 minutes and prevents hours of wrong assumptions:
 
-1. **Databricks MCP** — use `execute_sql` to inspect catalog contents (`` SHOW SCHEMAS IN `trading-signal-gen-dev` ``), check pipeline states, and verify table freshness.
+1. **Databricks MCP** — use `execute_sql` to inspect catalog contents (`` SHOW SCHEMAS IN `smart-trading-dev` ``), check pipeline states, and verify table freshness.
 2. **Read the latest spec** — `docs/superpowers/specs/` (most recent date wins).
 3. **Check coordination** — `ls docs/coordination/` for your ticket's file. If one exists, **read it fully** before coding — it tells you what other agents have built, what APIs they export, and what files they own. Update your section during/after work. See `docs/coordination/_TEMPLATE.md` for the format.
 

@@ -116,7 +116,7 @@ def news_causal_features_transform(
             ).alias("retrieval_story_ids"),
             F.lit(None).cast("double").alias("market_vol_at_publish"),
             F.lit(None).cast("string").alias("market_trend_at_publish"),
-            F.lit(None).cast("decimal(18,8)").alias("dollar_bar_close"),
+            F.lit(None).cast("double").alias("dollar_bar_close"),
             F.get_json_object(_cr, "$.extraction_path").alias("extraction_path"),
             F.get_json_object(_cr, "$.evidence_relevance_score")
             .cast("double")

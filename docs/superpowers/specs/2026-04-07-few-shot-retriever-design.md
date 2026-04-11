@@ -137,7 +137,7 @@ LangGraph invokes few_shot_retriever node
     │
     ├─ [3] Query Vector Search (warm path)
     │      query_vs_index(
-    │        index_name="trading-signal-gen-dev.gold.causal_chains_idx",
+    │        index_name="smart-trading-dev.03_gold.causal_chains_idx",
     │        query_text=headline,
     │        num_results=5,
     │        filters='{"validation_status": ["accepted"]}'
@@ -188,8 +188,8 @@ endpoint_type = "STANDARD"  # <100ms query latency
 ### Delta Sync Index Specification
 
 ```python
-index_name = "trading-signal-gen-{env}.gold.causal_chains_idx"
-source_table = "trading-signal-gen-{env}.gold.news_causal_features"
+index_name = "trading-signal-gen-{env}.03_gold.causal_chains_idx"
+source_table = "trading-signal-gen-{env}.03_gold.news_causal_features"
 
 embedding_config = {
     "column": "trigger_event",
@@ -392,7 +392,7 @@ uv run python scripts/provision_vector_search.py --env dev
 databricks vector-search endpoints get mas-few-shot
 
 # 2. Verify index exists
-databricks vector-search indexes get trading-signal-gen-dev.gold.causal_chains_idx
+databricks vector-search indexes get smart-trading-dev.03_gold.causal_chains_idx
 
 # 3. Test cold-start (< 50 chains)
 # Expected: returns 5 static examples
@@ -407,7 +407,7 @@ databricks vector-search indexes get trading-signal-gen-dev.gold.causal_chains_i
 ### Acceptance Criteria (from TRD-28)
 
 - ✅ VS endpoint `mas-few-shot` provisioned in dev workspace
-- ✅ VS index `trading-signal-gen-dev.gold.causal_chains_idx` created (TRIGGERED, accepted-only filter)
+- ✅ VS index `smart-trading-dev.03_gold.causal_chains_idx` created (TRIGGERED, accepted-only filter)
 - ✅ Cold-start: returns 5 static examples when index has < 50 chains
 - ✅ Warm state: returns up to 5 accepted chains for a crypto headline
 - ✅ Static fallback examples cover ≥4 of the 8 L1 categories (covers 5)

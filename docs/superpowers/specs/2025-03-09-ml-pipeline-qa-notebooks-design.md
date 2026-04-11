@@ -5,7 +5,7 @@ Build a comprehensive suite of Databricks notebooks to test, QA, and visualize e
 
 ## Constraints & Context
 *   **Environment:** Databricks Workspace (URL: `https://dbc-cbfc9b81-4abc.cloud.databricks.com/editor/notebooks/4210131968845413?o=7474659189103028`).
-*   **Data Source:** Must use `smart-trading-dev.others.ml_training_data` and relevant bronze tables (e.g., `trading-signal-gen-dev.bronze.raw_aggtrades_samples`).
+*   **Data Source:** Must use `smart-trading-dev.others.ml_training_data` and relevant bronze tables (e.g., `smart-trading-dev.01_bronze.raw_aggtrades_samples`).
 *   **Frameworks:** Polars for data manipulation, Scikit-learn for modeling, MLflow for tracking, Plotly/Matplotlib for visualizations.
 *   **Safety:** Data loading must handle memory constraints (slice by time/symbol before `.toArrow()`).
 

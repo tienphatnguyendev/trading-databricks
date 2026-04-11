@@ -49,7 +49,7 @@ CAUSAL_FEATURES_SCHEMA = StructType(
         # --- NULL until TRD-5 market context ---
         StructField("market_vol_at_publish", DoubleType(), nullable=True),
         StructField("market_trend_at_publish", StringType(), nullable=True),
-        StructField("dollar_bar_close", DecimalType(18, 8), nullable=True),  # NOT DoubleType
+        StructField("dollar_bar_close", DoubleType(), nullable=True),  # Changed from DecimalType(18, 8) for VS compatibility
         # --- V3 additions ---
         StructField("extraction_path", StringType(), nullable=True),          # fast|standard|careful
         StructField("evidence_relevance_score", DoubleType(), nullable=True),  # [0,1] cosine

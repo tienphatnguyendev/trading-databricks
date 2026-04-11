@@ -313,9 +313,9 @@ class TestMASConfig:
 
     def test_scalar_defaults(self):
         cfg = MASConfig()
-        assert cfg.catalog == "trading-signal-gen-dev"
+        assert cfg.catalog == "smart-trading-dev"
         assert cfg.schema == "gold"
-        assert cfg.vs_index_name == "trading-signal-gen-dev.gold.causal_chains_idx"
+        assert cfg.vs_index_name == "smart-trading-dev.03_gold.causal_chains_idx"
         assert cfg.vs_endpoint_name == "mas-few-shot"
         assert cfg.llm_endpoint == "databricks-claude-sonnet"
         assert cfg.agent_model_version == "v1.0"
@@ -337,7 +337,7 @@ class TestMASConfig:
         assert cfg.gatekeeper.confidence_threshold == 0.5  # nested unaffected
 
     def test_two_instances_are_independent(self):
-        cfg_a = MASConfig(catalog="trading-signal-gen-dev")
+        cfg_a = MASConfig(catalog="smart-trading-dev")
         cfg_b = MASConfig(catalog="trading-signal-gen-prod")
         assert cfg_a.catalog != cfg_b.catalog
         # nested objects are independent instances
@@ -363,9 +363,9 @@ class MASConfig:
     gatekeeper: GatekeeperConfig = field(default_factory=GatekeeperConfig)
     router: UncertaintyRouterConfig = field(default_factory=UncertaintyRouterConfig)
     validator: MechanismValidatorConfig = field(default_factory=MechanismValidatorConfig)
-    catalog: str = "trading-signal-gen-dev"
+    catalog: str = "smart-trading-dev"
     schema: str = "gold"
-    vs_index_name: str = "trading-signal-gen-dev.gold.causal_chains_idx"
+    vs_index_name: str = "smart-trading-dev.03_gold.causal_chains_idx"
     vs_endpoint_name: str = "mas-few-shot"
     llm_endpoint: str = "databricks-claude-sonnet"
     agent_model_version: str = "v1.0"

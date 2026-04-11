@@ -1068,7 +1068,7 @@ def seed_taxonomy(spark, *, catalog: str, schema: str) -> None:
 
     Args:
         spark: Active SparkSession.
-        catalog: Unity Catalog catalog name (e.g. "trading-signal-gen-dev").
+        catalog: Unity Catalog catalog name (e.g. "smart-trading-dev").
         schema: Schema name (e.g. "gold").
     """
     taxonomy_df = spark.createDataFrame(TREATMENT_TAXONOMY_SEED, schema=TREATMENT_TAXONOMY_SCHEMA)
@@ -1170,8 +1170,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Seed MAS taxonomy tables to Delta.")
     parser.add_argument(
         "--catalog",
-        default="trading-signal-gen-dev",
-        help="Unity Catalog catalog name (default: trading-signal-gen-dev)",
+        default="smart-trading-dev",
+        help="Unity Catalog catalog name (default: smart-trading-dev)",
     )
     parser.add_argument(
         "--schema",

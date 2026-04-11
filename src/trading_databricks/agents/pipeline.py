@@ -21,7 +21,7 @@ from pyspark import pipelines as dp
 from trading_databricks.agents.config import GatekeeperConfig
 from trading_databricks.agents.gold import news_causal_features_transform
 
-_CATALOG = "trading-signal-gen-dev"
+_CATALOG = "smart-trading-dev"
 
 
 @dp.materialized_view
