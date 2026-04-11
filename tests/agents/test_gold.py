@@ -52,7 +52,7 @@ def test_news_causal_features_transform_calls_spark_and_filters() -> None:
         gatekeeper_config=GatekeeperConfig(),
     )
 
-    spark.table.assert_called_once_with("trading-signal-gen-dev.silver.news_cleaned")
+    spark.table.assert_called_once_with("`trading-signal-gen-dev`.silver.news_cleaned")
     mock_df.filter.assert_called_once()
     mock_df.withColumn.assert_called_once()
     mock_df.select.assert_called_once()
