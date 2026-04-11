@@ -76,7 +76,7 @@ def news_causal_features_transform(
     _cr = F.col("causal_result")
 
     return (
-        spark.table(f"{catalog}.silver.news_cleaned")
+        spark.table(f"`{catalog}`.silver.news_cleaned")
         # Stage 1+2 gatekeeper: keep only crypto-impactful articles (~5%)
         .filter(gatekeeper_udf(F.col("headline"), F.col("body")))
         # Call MAS endpoint — returns JSON string with all causal fields
