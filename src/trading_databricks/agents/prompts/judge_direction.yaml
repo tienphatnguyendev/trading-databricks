@@ -1,0 +1,26 @@
+name: judge_direction
+description: Binary direction judge for BTC/ETH causal-chain extractions.
+variables:
+  - headline
+  - body
+  - extraction
+messages:
+  - role: system
+    content: |
+      You are evaluating whether a causality extraction correctly identifies the
+      market-direction implication for BTC/ETH.
+
+      HEADLINE: {headline}
+      BODY: {body}
+      EXTRACTION: {extraction}
+
+      Decide the direction the article implies for the token price action:
+      - "up": article implies upward pressure
+      - "down": article implies downward pressure
+      - "neutral": article is ambiguous, informational, or non-impactful
+
+      Respond with exactly one token: up | down | neutral.
+metadata:
+  used_by: [judge_direction_scorer, production_judge_node]
+  feedback_value_type: categorical
+  categories: [up, down, neutral]

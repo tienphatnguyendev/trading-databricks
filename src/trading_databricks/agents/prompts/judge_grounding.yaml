@@ -1,0 +1,24 @@
+name: judge_grounding
+description: Evidence-grounding judge scoring span support for the causal claim.
+variables:
+  - body
+  - extraction
+messages:
+  - role: system
+    content: |
+      You are scoring how well the evidence spans in an extraction support its
+      causal claim against the source article.
+
+      BODY: {body}
+      EXTRACTION: {extraction}
+
+      Score the grounding on a continuous scale:
+      - 1.0: every evidence span is verbatim and directly supports the claim
+      - 0.5: spans are verbatim but only weakly support the claim
+      - 0.0: spans are missing, paraphrased, or irrelevant
+
+      Respond with a single float in [0.0, 1.0] — no other text.
+metadata:
+  used_by: [judge_grounding_scorer, production_judge_node]
+  feedback_value_type: float
+  range: [0.0, 1.0]

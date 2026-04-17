@@ -1,0 +1,25 @@
+name: judge_mechanism
+description: Mechanism-whitelist judge for MAS extractions.
+variables:
+  - headline
+  - body
+  - extraction
+  - whitelist_injection
+messages:
+  - role: system
+    content: |
+      You evaluate whether the extracted mechanism correctly describes the causal
+      driver the article attributes to the BTC/ETH move.
+
+      HEADLINE: {headline}
+      BODY: {body}
+      EXTRACTION: {extraction}
+
+      WHITELIST:
+      {whitelist_injection}
+
+      Choose the single best mechanism from the whitelist for this article.
+      Respond with exactly that whitelist entry string (no punctuation, no explanation).
+metadata:
+  used_by: [judge_mechanism_scorer, production_judge_node]
+  feedback_value_type: categorical
