@@ -17,6 +17,18 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
 )
+from pydantic import BaseModel, Field
+
+class CausalChain(BaseModel):
+    """Pydantic schema for the LLM extraction JSON."""
+    is_impactful: bool = Field(description="False if the article does not describe a clear causal event for BTC/ETH")
+    treatment_class: str | None = Field(default=None, description="MUST be exactly one of the 34 categories")
+    trigger_event: str | None = Field(default=None, description="The raw event")
+    mechanism: str | None = Field(default=None, description="The causal driver, exactly matching a whitelist entry for the L1 category")
+    asset: str | None = Field(default=None, description="BTC|ETH|BOTH")
+    direction: str | None = Field(default=None, description="up|down|neutral")
+    evidence_spans: list[str] | None = Field(default=None, description="VERBATIM exact character sequences from the article body")
+    reasoning: str | None = Field(default=None, description="Explicit chain-of-thought reasoning")
 
 # ---------------------------------------------------------------------------
 # Primary output table — one row per news article processed by the MAS.
