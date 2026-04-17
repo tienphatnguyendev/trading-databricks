@@ -8,6 +8,10 @@ from __future__ import annotations
 import json
 
 from trading_databricks.agents.config import MASConfig
+from trading_databricks.common.uc_identifiers import (
+    MECHANISM_WHITELIST_TABLE,
+    quoted_table_fqn,
+)
 from trading_databricks.agents.nodes.few_shot_retriever import (
     STATIC_FEW_SHOT_EXAMPLES,
     get_accepted_chain_count,
@@ -98,8 +102,11 @@ def fetch_mechanism_whitelist(*, config: MASConfig | None = None) -> str:
     """
     if config is None:
         config = MASConfig()
+
     spark = get_spark_session()
-    rows = spark.table(f"`{config.catalog}`.{config.schema}.mechanism_whitelist").collect()
+    rows = spark.table(
+        quoted_table_fqn(config.catalog, config.schema, MECHANISM_WHITELIST_TABLE)
+    ).collect()
     return json.dumps([row.asDict() for row in rows])
 
 

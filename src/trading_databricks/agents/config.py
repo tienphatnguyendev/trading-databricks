@@ -7,6 +7,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from trading_databricks.common.uc_identifiers import (
+    EMBEDDING_ENDPOINT_NAME,
+    GOLD_SCHEMA,
+    DEFAULT_CATALOG,
+    MAS_LLM_ENDPOINT_NAME,
+    MAS_VS_ENDPOINT_NAME,
+    MAS_VS_INDEX_NAME,
+)
+
 
 @dataclass(frozen=True)
 class GatekeeperConfig:
@@ -28,7 +37,7 @@ class UncertaintyRouterConfig:
 @dataclass(frozen=True)
 class MechanismValidatorConfig:
     evidence_grounding_reject_threshold: float | None = None  # None = log only (V3)
-    embedding_model: str = "databricks-gte-large-en"
+    embedding_model: str = EMBEDDING_ENDPOINT_NAME
 
 
 @dataclass(frozen=True)
@@ -36,9 +45,9 @@ class MASConfig:
     gatekeeper: GatekeeperConfig = field(default_factory=GatekeeperConfig)
     router: UncertaintyRouterConfig = field(default_factory=UncertaintyRouterConfig)
     validator: MechanismValidatorConfig = field(default_factory=MechanismValidatorConfig)
-    catalog: str = "smart-trading-dev"
-    schema: str = "03_gold"
-    vs_index_name: str = "smart-trading-dev.03_gold.causal_chains_idx"
-    vs_endpoint_name: str = "mas-few-shot"
-    llm_endpoint: str = "databricks-meta-llama-3-1-8b-instruct"
+    catalog: str = DEFAULT_CATALOG
+    schema: str = GOLD_SCHEMA
+    vs_index_name: str = MAS_VS_INDEX_NAME
+    vs_endpoint_name: str = MAS_VS_ENDPOINT_NAME
+    llm_endpoint: str = MAS_LLM_ENDPOINT_NAME
     agent_model_version: str = "v1.0"

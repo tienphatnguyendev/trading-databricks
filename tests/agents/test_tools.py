@@ -5,6 +5,10 @@ import json
 from unittest.mock import MagicMock, patch
 
 from trading_databricks.agents.config import MASConfig
+from trading_databricks.common.uc_identifiers import (
+    MECHANISM_WHITELIST_TABLE,
+    quoted_table_fqn,
+)
 
 
 @patch("trading_databricks.agents.tools.get_spark_session")
@@ -40,7 +44,11 @@ def test_fetch_mechanism_whitelist_returns_json_string(mock_spark: MagicMock) ->
     assert parsed[1]["mechanism"] == "liquidity_contraction"
 
     mock_spark_instance.table.assert_called_once_with(
-        "`smart-trading-dev`.03_gold.mechanism_whitelist"
+        quoted_table_fqn(
+            MASConfig().catalog,
+            MASConfig().schema,
+            MECHANISM_WHITELIST_TABLE,
+        )
     )
 
 
@@ -57,4 +65,6 @@ def test_fetch_mechanism_whitelist_uses_config_catalog(mock_spark: MagicMock) ->
     result = fetch_mechanism_whitelist(config=custom_config)
 
     assert json.loads(result) == []
-    mock_spark_instance.table.assert_called_once_with("`my-catalog`.gold.mechanism_whitelist")
+    mock_spark_instance.table.assert_called_once_with(
+        quoted_table_fqn("my-catalog", "gold", MECHANISM_WHITELIST_TABLE)
+    )

@@ -89,7 +89,7 @@ def get_accepted_chain_count(
     Args:
         spark: SparkSession instance
         catalog: Databricks catalog name
-        schema: Schema name (typically 'gold')
+        schema: Schema name (typically '03_gold')
         cache_ttl_seconds: Cache TTL in seconds (default: 300 = 5min)
 
     Returns:
@@ -98,8 +98,8 @@ def get_accepted_chain_count(
     Example:
         >>> count = get_accepted_chain_count(
         ...     spark,
-        ...     catalog="trading-signal-gen-dev",
-        ...     schema="gold"
+        ...     catalog="<catalog-name>",
+        ...     schema="03_gold"
         ... )
         >>> print(f"Accepted chains: {count}")
     """
@@ -164,7 +164,7 @@ def query_vector_search(
     Example:
         >>> results = query_vector_search(
         ...     "Fed raises interest rates",
-        ...     index_name="trading-signal-gen-dev.gold.causal_chains_idx"
+        ...     index_name="<catalog>.<schema>.causal_chains_idx"
         ... )
         >>> len(results)
         5

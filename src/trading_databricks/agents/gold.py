@@ -19,6 +19,7 @@ from pyspark.sql.types import BooleanType
 
 from trading_databricks.agents.config import GatekeeperConfig
 from trading_databricks.agents.gatekeeper import is_crypto_relevant
+from trading_databricks.common.uc_identifiers import SILVER_SCHEMA, quoted_table_fqn
 
 
 def _make_gatekeeper_udf(config: GatekeeperConfig) -> Callable:
@@ -64,7 +65,7 @@ def news_causal_features_transform(
 
     Args:
         spark: Active SparkSession (Databricks Connect or SDP runtime).
-        catalog: Unity Catalog catalog name (e.g., "trading-signal-gen-dev").
+        catalog: Unity Catalog catalog name (e.g., "<catalog-name>").
         gatekeeper_config: GatekeeperConfig for NER-based filtering.
 
     Returns:
@@ -76,7 +77,7 @@ def news_causal_features_transform(
     _cr = F.col("causal_result")
 
     return (
-        spark.table(f"`{catalog}`.silver.news_cleaned")
+        spark.table(quoted_table_fqn(catalog, SILVER_SCHEMA, "news_cleaned"))
         # Stage 1+2 gatekeeper: keep only crypto-impactful articles (~5%)
         .filter(gatekeeper_udf(F.col("headline"), F.col("body")))
         # Call MAS endpoint — returns JSON string with all causal fields

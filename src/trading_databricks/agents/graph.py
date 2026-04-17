@@ -5,6 +5,7 @@ All transform logic lives in nodes/. This file owns topology only.
 """
 from __future__ import annotations
 
+import os
 from typing import Literal
 
 import mlflow.deployments
@@ -46,7 +47,9 @@ def _mechanism_validator_node(state: MASState, config: MASConfig) -> dict:
     spark = get_spark_session()
     whitelist = load_whitelist(spark, catalog=config.catalog, schema=config.schema)
 
-    client = mlflow.deployments.get_deploy_client("databricks")
+    profile = os.environ.get("DATABRICKS_CONFIG_PROFILE", os.environ.get("DATABRICKS_PROFILE", ""))
+    target_uri = f"databricks://{profile}" if profile else "databricks"
+    client = mlflow.deployments.get_deploy_client(target_uri)
 
     def embed_fn(text: str) -> list[float]:
         resp = client.predict(

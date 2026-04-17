@@ -20,8 +20,9 @@ from pyspark import pipelines as dp
 
 from trading_databricks.agents.config import GatekeeperConfig
 from trading_databricks.agents.gold import news_causal_features_transform
+from trading_databricks.common.uc_identifiers import DEFAULT_CATALOG
 
-_CATALOG = "smart-trading-dev"
+_CATALOG = DEFAULT_CATALOG
 
 
 @dp.materialized_view

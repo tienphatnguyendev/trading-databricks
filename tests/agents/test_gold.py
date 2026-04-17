@@ -1,3 +1,4 @@
+
 """Tests for agents/gold.py — news_causal_features_transform."""
 
 from __future__ import annotations
@@ -5,6 +6,7 @@ from __future__ import annotations
 from unittest.mock import MagicMock
 
 from trading_databricks.agents.config import GatekeeperConfig
+from trading_databricks.common.uc_identifiers import SILVER_SCHEMA, quoted_table_fqn
 
 
 def test_gatekeeper_udf_passes_crypto_article() -> None:
@@ -48,11 +50,13 @@ def test_news_causal_features_transform_calls_spark_and_filters() -> None:
 
     result = news_causal_features_transform(
         spark,
-        catalog="trading-signal-gen-dev",
+        catalog="custom-catalog",
         gatekeeper_config=GatekeeperConfig(),
     )
 
-    spark.table.assert_called_once_with("`trading-signal-gen-dev`.silver.news_cleaned")
+    spark.table.assert_called_once_with(
+        quoted_table_fqn("custom-catalog", SILVER_SCHEMA, "news_cleaned")
+    )
     mock_df.filter.assert_called_once()
     mock_df.withColumn.assert_called_once()
     mock_df.select.assert_called_once()

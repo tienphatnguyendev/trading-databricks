@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections import Counter
 from typing import Any
 
@@ -90,7 +91,9 @@ def causality_extractor(state: MASState, config: MASConfig) -> MASState:
     temperature = 0.7 if path == "careful" else 0.0
     n_choices = 3 if path == "careful" else 1
 
-    client = mlflow.deployments.get_deploy_client("databricks")
+    profile = os.environ.get("DATABRICKS_CONFIG_PROFILE", os.environ.get("DATABRICKS_PROFILE", ""))
+    target_uri = f"databricks://{profile}" if profile else "databricks"
+    client = mlflow.deployments.get_deploy_client(target_uri)
 
     logger.info(
         f"Calling LLM {config.llm_endpoint} for path={path}, n={n_choices}, temp={temperature}"

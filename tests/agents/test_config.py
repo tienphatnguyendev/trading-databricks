@@ -9,6 +9,14 @@ from trading_databricks.agents.config import (
     MechanismValidatorConfig,
     UncertaintyRouterConfig,
 )
+from trading_databricks.common.uc_identifiers import (
+    DEFAULT_CATALOG,
+    EMBEDDING_ENDPOINT_NAME,
+    GOLD_SCHEMA,
+    MAS_LLM_ENDPOINT_NAME,
+    MAS_VS_ENDPOINT_NAME,
+    MAS_VS_INDEX_NAME,
+)
 
 
 class TestGatekeeperConfig:
@@ -56,7 +64,7 @@ class TestMechanismValidatorConfig:
     def test_defaults(self):
         cfg = MechanismValidatorConfig()
         assert cfg.evidence_grounding_reject_threshold is None
-        assert cfg.embedding_model == "databricks-gte-large-en"
+        assert cfg.embedding_model == EMBEDDING_ENDPOINT_NAME
 
     def test_frozen(self):
         cfg = MechanismValidatorConfig()
@@ -87,15 +95,15 @@ class TestMASConfig:
         assert cfg.router.high_similarity_threshold == 0.85
         assert cfg.router.min_index_size == 50
         assert cfg.validator.evidence_grounding_reject_threshold is None
-        assert cfg.validator.embedding_model == "databricks-gte-large-en"
+        assert cfg.validator.embedding_model == EMBEDDING_ENDPOINT_NAME
 
     def test_scalar_defaults(self):
         cfg = MASConfig()
-        assert cfg.catalog == "smart-trading-dev"
-        assert cfg.schema == "03_gold"
-        assert cfg.vs_index_name == "smart-trading-dev.03_gold.causal_chains_idx"
-        assert cfg.vs_endpoint_name == "mas-few-shot"
-        assert cfg.llm_endpoint == "databricks-meta-llama-3-1-8b-instruct"
+        assert cfg.catalog == DEFAULT_CATALOG
+        assert cfg.schema == GOLD_SCHEMA
+        assert cfg.vs_index_name == MAS_VS_INDEX_NAME
+        assert cfg.vs_endpoint_name == MAS_VS_ENDPOINT_NAME
+        assert cfg.llm_endpoint == MAS_LLM_ENDPOINT_NAME
         assert cfg.agent_model_version == "v1.0"
 
     def test_frozen(self):
@@ -115,7 +123,7 @@ class TestMASConfig:
         assert cfg.gatekeeper.confidence_threshold == 0.5  # nested unaffected
 
     def test_two_instances_are_independent(self):
-        cfg_a = MASConfig(catalog="trading-signal-gen-dev")
+        cfg_a = MASConfig(catalog="test-catalog-a")
         cfg_b = MASConfig(catalog="trading-signal-gen-prod")
         assert cfg_a.catalog != cfg_b.catalog
         # nested objects are independent instances
