@@ -36,3 +36,20 @@ def test_mas_state_has_body_and_extraction_fields():
     assert state["extraction"]["treatment_class"] == "Regulation.etf_ruling"
     assert state["validation_status"] == "accepted"
     assert state["evidence_relevance_score"] == pytest.approx(0.87)
+
+def test_mas_state_accepts_new_subpipeline_keys():
+    """Verify TypedDict accepts the 7 new keys added for causality discovery sub-pipeline."""
+    from trading_databricks.agents.state import MASState
+
+    state: MASState = {
+        "evidence": [{"actor": "BlackRock", "action": "files"}],
+        "evidence_status": "ok",
+        "precedents": [{"headline": "x", "return_24h": 0.04}],
+        "precedent_status": "ok",
+        "extraction_status": "ok",
+        "judge_results": {"direction": {"passed": True, "score": 0.9}},
+        "judge_failures": None,
+        "reflection_count": 0,
+    }
+    assert state["evidence_status"] == "ok"
+    assert state["reflection_count"] == 0
