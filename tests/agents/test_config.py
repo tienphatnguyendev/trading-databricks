@@ -128,3 +128,29 @@ class TestMASConfig:
         assert cfg_a.catalog != cfg_b.catalog
         # nested objects are independent instances
         assert cfg_a.gatekeeper is not cfg_b.gatekeeper
+
+def test_reflection_config_defaults():
+    from trading_databricks.agents.config import ReflectionConfig
+
+    cfg = ReflectionConfig()
+    assert cfg.max_reflections == 1
+
+
+def test_judge_panel_config_defaults():
+    from trading_databricks.agents.config import JudgePanelConfig
+
+    cfg = JudgePanelConfig()
+    assert cfg.judge_endpoint == "databricks-meta-llama-3-1-8b-instruct"
+    assert cfg.timeout_s == 10.0
+
+
+def test_mas_config_includes_subpipeline_configs():
+    from trading_databricks.agents.config import MASConfig
+
+    cfg = MASConfig()
+    assert cfg.reflection.max_reflections == 1
+    assert cfg.judge_panel.judge_endpoint
+    assert cfg.rag.firehose_index_name.endswith(".news_firehose_idx")
+    assert cfg.rag.timeout_s == 5.0
+    assert cfg.rag.num_precedents == 5
+    assert cfg.rag.outcome_window_hours == 24
