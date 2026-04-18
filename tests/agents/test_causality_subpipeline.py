@@ -90,9 +90,9 @@ def test_subpipeline_happy_path(
     # Stub the validator's external resources via graph helpers
     with patch("trading_databricks.agents.graph.get_spark_session"), \
          patch("trading_databricks.agents.graph.load_whitelist", return_value={("Regulation", "etf_inflow_demand"): ["bullish"]}), \
-         patch("trading_databricks.agents.graph.context_retriever", side_effect=lambda s, config: {"market_vol_at_publish": 0.02, "market_trend_at_publish": "up", "dollar_bar_close": 3500.0}), \
-         patch("trading_databricks.agents.graph.few_shot_retriever", side_effect=lambda s, config: {"few_shot_examples": [], "retrieval_story_ids": []}), \
-         patch("trading_databricks.agents.graph.uncertainty_router", side_effect=lambda s, config: {"extraction_path": "standard"}):
+         patch("trading_databricks.agents.nodes.context_retriever", side_effect=lambda s, config: {"market_vol_at_publish": 0.02, "market_trend_at_publish": "up", "dollar_bar_close": 3500.0}), \
+         patch("trading_databricks.agents.nodes.few_shot_retriever", side_effect=lambda s, config: {"few_shot_examples": [], "retrieval_story_ids": []}), \
+         patch("trading_databricks.agents.nodes.uncertainty_router", side_effect=lambda s, config: {"extraction_path": "standard"}):
         graph = build_mas_graph(config=MASConfig())
         result = graph.invoke(_entry_state())
 
@@ -116,13 +116,19 @@ def test_subpipeline_reflects_then_passes(
     from trading_databricks.agents.graph import build_mas_graph
 
     def _predict(endpoint, inputs, **kwargs):
+        if "input" in inputs:
+            # Embedding call from validator
+            return {"data": [{"embedding": [0.1] * 8}]}
+
         msgs = inputs.get("messages", [])
         content = " ".join(m.get("content", "") for m in msgs).lower()
         if "evidence" in content and "actor" in content and "treatment_class" not in content:
             return {"choices": [{"message": {"content": '[{"actor": "BlackRock", "action": "files", "span": "BlackRock files for spot Ether ETF"}]'}}]}
         elif "treatment_class" in content:
             return {"choices": [{"message": {"content": json.dumps(VALID_EXTRACTION)}}]}
-        return {"data": [{"embedding": [0.1] * 8}]}
+        
+        # Fallback
+        return {"choices": [{"message": {"content": "{}"}}]}
 
     unified_client = MagicMock()
     unified_client.predict.side_effect = _predict
@@ -148,9 +154,9 @@ def test_subpipeline_reflects_then_passes(
 
     with patch("trading_databricks.agents.graph.get_spark_session"), \
          patch("trading_databricks.agents.graph.load_whitelist", return_value={("Regulation", "etf_inflow_demand"): ["bullish"]}), \
-         patch("trading_databricks.agents.graph.context_retriever", side_effect=lambda s, config: {"market_vol_at_publish": 0.02, "market_trend_at_publish": "up", "dollar_bar_close": 3500.0}), \
-         patch("trading_databricks.agents.graph.few_shot_retriever", side_effect=lambda s, config: {"few_shot_examples": [], "retrieval_story_ids": []}), \
-         patch("trading_databricks.agents.graph.uncertainty_router", side_effect=lambda s, config: {"extraction_path": "standard"}):
+         patch("trading_databricks.agents.nodes.context_retriever", side_effect=lambda s, config: {"market_vol_at_publish": 0.02, "market_trend_at_publish": "up", "dollar_bar_close": 3500.0}), \
+         patch("trading_databricks.agents.nodes.few_shot_retriever", side_effect=lambda s, config: {"few_shot_examples": [], "retrieval_story_ids": []}), \
+         patch("trading_databricks.agents.nodes.uncertainty_router", side_effect=lambda s, config: {"extraction_path": "standard"}):
         graph = build_mas_graph(config=MASConfig())
         result = graph.invoke(_entry_state())
 
@@ -174,6 +180,8 @@ def test_subpipeline_budget_exhausted(
     call_counts = {"hyp": 0}
 
     def _predict(endpoint, inputs, **kwargs):
+        if "input" in inputs:
+            return {"data": [{"embedding": [0.1] * 8}]}
         msgs = inputs.get("messages", [])
         content = " ".join(m.get("content", "") for m in msgs).lower()
         if "evidence" in content and "actor" in content and "treatment_class" not in content:
@@ -181,7 +189,8 @@ def test_subpipeline_budget_exhausted(
         elif "treatment_class" in content:
             call_counts["hyp"] += 1
             return {"choices": [{"message": {"content": json.dumps(VALID_EXTRACTION)}}]}
-        return {"data": [{"embedding": [0.1] * 8}]}
+        
+        return {"choices": [{"message": {"content": "{}"}}]}
 
     unified_client = MagicMock()
     unified_client.predict.side_effect = _predict
@@ -200,9 +209,9 @@ def test_subpipeline_budget_exhausted(
 
     with patch("trading_databricks.agents.graph.get_spark_session"), \
          patch("trading_databricks.agents.graph.load_whitelist", return_value={("Regulation", "etf_inflow_demand"): ["bullish"]}), \
-         patch("trading_databricks.agents.graph.context_retriever", side_effect=lambda s, config: {"market_vol_at_publish": 0.02, "market_trend_at_publish": "up", "dollar_bar_close": 3500.0}), \
-         patch("trading_databricks.agents.graph.few_shot_retriever", side_effect=lambda s, config: {"few_shot_examples": [], "retrieval_story_ids": []}), \
-         patch("trading_databricks.agents.graph.uncertainty_router", side_effect=lambda s, config: {"extraction_path": "standard"}):
+         patch("trading_databricks.agents.nodes.context_retriever", side_effect=lambda s, config: {"market_vol_at_publish": 0.02, "market_trend_at_publish": "up", "dollar_bar_close": 3500.0}), \
+         patch("trading_databricks.agents.nodes.few_shot_retriever", side_effect=lambda s, config: {"few_shot_examples": [], "retrieval_story_ids": []}), \
+         patch("trading_databricks.agents.nodes.uncertainty_router", side_effect=lambda s, config: {"extraction_path": "standard"}):
         graph = build_mas_graph(config=MASConfig())
         result = graph.invoke(_entry_state())
 

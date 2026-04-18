@@ -72,6 +72,7 @@ class MASState(TypedDict, total=False):
 
     # --- sub-pipeline: reflector ---
     reflection_count: int
+    _route: str
 
     # --- validation (mechanism_validator) ---
     validation_status: str | None
