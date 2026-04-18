@@ -30,6 +30,7 @@ from notebooks.qa.utils import (
     log_plotly,
     mlflow_component_run,
 )
+from trading_databricks.common.uc_identifiers import DOLLAR_BARS_FQN
 from trading_databricks.ml.config import CUSUMConfig, MLPipelineConfig, TrainingConfig
 from trading_databricks.ml.cusum import detect_cusum_events
 from trading_databricks.ml.labeling import compute_triple_barrier_labels
@@ -68,7 +69,7 @@ with mlflow_component_run(
     print_header("Step 1: Load Raw Dollar Bars")
     t0 = time.time()
     bars = load_raw_dollar_bars(symbol="BTCUSDT", limit=100_000)
-    log_dataset(bars, name="dollar_bars", source="trading-signal-gen-dev.gold.dollar_bars")
+    log_dataset(bars, name="dollar_bars", source=DOLLAR_BARS_FQN)
     durations["load"] = time.time() - t0
 
     print_observation(

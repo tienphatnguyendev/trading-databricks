@@ -1,6 +1,6 @@
 -- BRONZE LAYER of Tick Data (symbol BTC): Ingest data from Kinesis Stream
 CREATE OR REFRESH STREAMING TABLE 
-  `trading-signal-dev`.`01_bronze`.ticks_bronze
+  `smart-trading-dev`.`01_bronze`.ticks_bronze
   COMMENT "BRONZE LAYER of Tick Data: Ingest data from Kinesis Stream"
   TBLPROPERTIES ("quality" = "bronze")
 AS 
@@ -46,7 +46,7 @@ FROM STREAM read_kinesis (
 
 -- SILVER LAYER of Tick Data: Transform and Validate data
 CREATE OR REFRESH STREAMING TABLE 
-  `trading-signal-dev`.`02_silver`.ticks_silver
+  `smart-trading-dev`.`02_silver`.ticks_silver
   COMMENT "SILVER LAYER of Tick Data: Transform and Validate data"
   TBLPROPERTIES ('quality' = 'silver')
 AS 
@@ -69,7 +69,7 @@ WITH cte_parse AS (
     kinesis_sequence_number,
     kinesis_arrival_time,
     bronze_arrival_time
-  FROM STREAM `trading-signal-dev`.`01_bronze`.ticks_bronze
+  FROM STREAM `smart-trading-dev`.`01_bronze`.ticks_bronze
 )
 SELECT 
   parsed_data.timestamp AS timestamp,

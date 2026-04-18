@@ -15,6 +15,7 @@ from notebooks.qa.utils import (
     mlflow_component_run,
     summarize,
 )
+from trading_databricks.common.uc_identifiers import DOLLAR_BARS_FQN
 from trading_databricks.ml.config import CUSUMConfig, LabelConfig
 from trading_databricks.ml.cusum import compute_cusum_stats, detect_cusum_events
 from trading_databricks.ml.labeling import compute_triple_barrier_labels
@@ -38,7 +39,7 @@ flat_params = {
 with mlflow_component_run(layer="ml", component="cusum_and_labeling", params=flat_params):
     # Section 1 — Load input
     bars = load_raw_dollar_bars(symbol="BTCUSDT", limit=50_000)
-    log_dataset(bars, name="dollar_bars", source="trading-signal-gen-dev.gold.dollar_bars")
+    log_dataset(bars, name="dollar_bars", source=DOLLAR_BARS_FQN)
     log_diag("bars_input_summary", summarize(bars, ["close", "volume"]))
 
     # Section 2 — Exercise component

@@ -31,8 +31,15 @@
 
 from __future__ import annotations
 
-import json
+import sys
 import os
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..')))
+
+os.environ.setdefault("DATABRICKS_CONFIG_PROFILE", "smart-trading-v2")
+os.environ["MLFLOW_ENABLE_ASYNC_TRACE_LOGGING"] = "False"
+
+import json
+
 
 import mlflow
 import mlflow.langchain
@@ -55,6 +62,13 @@ from notebooks.qa.utils import (
     wire_graph_environment,
 )
 from trading_databricks.agents.config import MASConfig
+from trading_databricks.common.uc_identifiers import (
+    MAS_TRAINING_DATASET_TABLE,
+    MECHANISM_WHITELIST_TABLE,
+    OTHERS_SCHEMA,
+    TREATMENT_TAXONOMY_TABLE,
+    quoted_table_fqn,
+)
 
 # ---------------------------------------------------------------------------
 # Execution parameters — override via environment variables
@@ -77,7 +91,8 @@ params: dict = {
 }
 
 mlflow.langchain.autolog()
-mlflow.set_tracking_uri("databricks")
+profile = os.environ.get("DATABRICKS_CONFIG_PROFILE")
+mlflow.set_tracking_uri(f"databricks://{profile}" if profile else "databricks")
 
 _display(f"Running in {'OFFLINE' if OFFLINE else 'LIVE'} mode | N={SAMPLE_SIZE}")
 _display(params)
@@ -99,8 +114,7 @@ mlflow.set_tag("run_kind", "e2e_deep_dive")
 graph = build_instrumented_mas_graph(config)
 mermaid = graph.get_graph().draw_mermaid()
 mlflow.log_text(mermaid, "topology/graph.mmd")
-_display("### MAS Topology")
-_display(mermaid)
+
 
 # COMMAND ----------
 
@@ -131,10 +145,14 @@ _ok, _detail = _endpoint_ready(config.validator.embedding_model)
 _run_probe("embedding_endpoint", _ok, _detail, critical=False)
 
 # Taxonomy / whitelist tables
-_ok, _detail = _table_has_rows(f"`{config.catalog}`.{config.schema}.treatment_taxonomy")
+_ok, _detail = _table_has_rows(
+    quoted_table_fqn(config.catalog, config.schema, TREATMENT_TAXONOMY_TABLE)
+)
 _run_probe("treatment_taxonomy_table", _ok, _detail, critical=False)
 
-_ok, _detail = _table_has_rows(f"`{config.catalog}`.{config.schema}.mechanism_whitelist")
+_ok, _detail = _table_has_rows(
+    quoted_table_fqn(config.catalog, config.schema, MECHANISM_WHITELIST_TABLE)
+)
 _run_probe("mechanism_whitelist_table", _ok, _detail, critical=False)
 
 # Vector Search index
@@ -172,7 +190,7 @@ log_diag("preflight", pl.DataFrame(preflight_rows))
 from mlflow.data.sources import DeltaDatasetSource
 
 # — Source table
-_MAS_TABLE = "`smart-trading-dev`.others.mas_training_dataset"
+_MAS_TABLE = quoted_table_fqn(config.catalog, OTHERS_SCHEMA, MAS_TRAINING_DATASET_TABLE)
 
 if OFFLINE:
     # Minimal synthetic frame so the notebook runs without Databricks
@@ -310,8 +328,12 @@ except Exception as _wl_exc:
     _whitelist = {}
 
 
+
+@mlflow.trace(name="predict_fn")
 def predict_fn(inputs: dict) -> dict:
+    mlflow.update_current_trace(tags={"story_id": inputs.get("story_id", "")})
     """Invoke the compiled MAS graph for a single article."""
+
     state = {
         "headline": inputs.get("headline", ""),
         "body": inputs.get("body", ""),
@@ -378,20 +400,62 @@ def extraction_path_label(*, inputs: dict, outputs: dict) -> str:  # type: ignor
 
 # LLM-as-judge: groundedness
 def make_judge() -> object:  # type: ignore[return]
+    _guideline_text = (
+        "The extraction's evidence_spans must all be directly quoted or "
+        "closely paraphrased from the article body. Score 'yes' only if "
+        "every span is grounded in the body text; 'no' otherwise."
+    )
+
+    import importlib.util
+
+    _has_db_agents = importlib.util.find_spec("databricks.agents") is not None
+    _guidelines_cls = None
     try:
         from mlflow.genai.scorers import Guidelines
 
-        groundedness_judge = Guidelines(
-            name="groundedness",
-            guidelines=(
-                "The extraction's evidence_spans must all be directly quoted or "
-                "closely paraphrased from the article body. Score 'yes' only if "
-                "every span is grounded in the body text; 'no' otherwise."
-            ),
+        _guidelines_cls = Guidelines
+    except (ImportError, AttributeError):
+        _guidelines_cls = None
+
+    # In MLflow 3.0.x local dev, neither path is available; skip quietly.
+    if _guidelines_cls is None and not _has_db_agents:
+        return None
+
+    # MLflow >= 3.4 API
+    if _guidelines_cls is not None:
+        return _guidelines_cls(name="groundedness", guidelines=_guideline_text)
+
+    # MLflow 3.0-3.3 API (requires databricks-agents runtime package)
+    try:
+        from mlflow.genai.scorers.builtin_scorers import GuidelineAdherence
+
+        if not _has_db_agents:
+            _display(
+                "LLM judge disabled for this run: databricks-agents is not "
+                "installed in this environment"
+            )
+            return None
+
+        _legacy_guideline = GuidelineAdherence(name="groundedness")
+        _guidelines = {"groundedness": [_guideline_text]}
+
+        @scorer
+        def legacy_groundedness_judge(*, inputs: dict, outputs: dict) -> object:  # type: ignore[return]
+            _output_payload = outputs.get("output") or {}
+            _judge_outputs = _output_payload.get("extraction") or _output_payload
+            return _legacy_guideline(
+                inputs=inputs,
+                outputs=_judge_outputs,
+                guidelines=_guidelines,
+                guidelines_context={"article_body": inputs.get("body", "")},
+            )
+
+        return legacy_groundedness_judge
+    except (ImportError, AttributeError, ModuleNotFoundError) as _legacy_api_exc:
+        _display(
+            "LLM judge unavailable in this environment "
+            f"({_legacy_api_exc!r}); continuing without it"
         )
-        return groundedness_judge
-    except Exception as _e:
-        _display(f"Judge construction failed ({_e!r}); skipping LLM judge")
         return None
 
 
@@ -704,7 +768,18 @@ _sample_by_story = {r["story_id"]: r for r in sample.to_dicts()}
 
 def render_autopsy(story_id: str) -> None:
     """Render the trace for a given story_id: prompts, LLM outputs, validator verdict."""
-    match = flat_span_df.filter(pl.col("trace_id").str.contains(story_id)) if flat_span_df.height > 0 else pl.DataFrame()
+    match_tid = None
+    if traces_df is not None and not traces_df.empty:
+        for _, row in traces_df.iterrows():
+            trace_tags = row.get("tags", {})
+            if isinstance(trace_tags, dict) and trace_tags.get("story_id") == story_id:
+                match_tid = row.get("trace_id")
+                break
+    
+    match = pl.DataFrame()
+    if match_tid is not None and flat_span_df.height > 0:
+        match = flat_span_df.filter(pl.col("trace_id") == match_tid)
+
     if match.height == 0:
         _display(f"no span rows for story_id={story_id}")
         return
@@ -842,3 +917,6 @@ _display(summary_payload)
 
 # Release the wire_graph_environment context opened in §5.
 graph_env_ctx.__exit__(None, None, None)
+
+import sys
+sys.exit(0)

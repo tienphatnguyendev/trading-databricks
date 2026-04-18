@@ -36,17 +36,27 @@ def provision_vs_infrastructure(env: str) -> None:
     """
     # Import config
     from trading_databricks.agents.config import MASConfig
+    from trading_databricks.common.uc_identifiers import (
+        CAUSAL_CHAINS_INDEX_TABLE,
+        EMBEDDING_ENDPOINT_NAME,
+        GOLD_SCHEMA,
+        NEWS_CAUSAL_FEATURES_TABLE,
+        quoted_table_fqn,
+        table_fqn,
+    )
 
     # Create config (catalog and index name will be env-specific)
     if env == "dev":
-        config = MASConfig(
-            catalog="smart-trading-dev",
-            vs_index_name="smart-trading-dev.03_gold.causal_chains_idx",
-        )
+        config = MASConfig()
     elif env == "prod":
         config = MASConfig(
             catalog="trading-signal-gen-prod",
-            vs_index_name="trading-signal-gen-prod.gold.causal_chains_idx",
+            schema=GOLD_SCHEMA,
+            vs_index_name=table_fqn(
+                "trading-signal-gen-prod",
+                GOLD_SCHEMA,
+                CAUSAL_CHAINS_INDEX_TABLE,
+            ),
         )
     else:
         raise ValueError(f"Invalid environment: {env}. Must be 'dev' or 'prod'")
@@ -68,10 +78,15 @@ def provision_vs_infrastructure(env: str) -> None:
     # Ensure source table exists before index creation
     logger.info("Ensuring source table exists...")
     spark = DatabricksSession.builder.serverless(True).getOrCreate()
-    source_table = f"{config.catalog}.{config.schema}.news_causal_features"
+    source_table = table_fqn(config.catalog, config.schema, NEWS_CAUSAL_FEATURES_TABLE)
+    source_table_quoted = quoted_table_fqn(
+        config.catalog,
+        config.schema,
+        NEWS_CAUSAL_FEATURES_TABLE,
+    )
     spark.createDataFrame([], CAUSAL_FEATURES_SCHEMA).write.format("delta").option(
         "mergeSchema", "true"
-    ).mode("ignore").saveAsTable(source_table)
+    ).mode("ignore").saveAsTable(source_table_quoted)
 
     # Step 1: Create/update VS endpoint
     endpoint_name = config.vs_endpoint_name  # "mas-few-shot"
@@ -105,7 +120,7 @@ def provision_vs_infrastructure(env: str) -> None:
                 embedding_source_columns=[
                     {
                         "name": "trigger_event",
-                        "embedding_model_endpoint_name": "databricks-gte-large-en",
+                        "embedding_model_endpoint_name": EMBEDDING_ENDPOINT_NAME,
                     }
                 ],
                 pipeline_type="TRIGGERED",
@@ -136,7 +151,7 @@ def provision_vs_infrastructure(env: str) -> None:
     logger.info(f"Endpoint:        {endpoint_name} (STANDARD type)")
     logger.info(f"Index:           {index_name}")
     logger.info(f"Source table:    {source_table}")
-    logger.info("Embedding model: databricks-gte-large-en")
+    logger.info(f"Embedding model: {EMBEDDING_ENDPOINT_NAME}")
     logger.info("Sync mode:       TRIGGERED (manual refresh)")
     logger.info("")
     logger.info("Next steps:")

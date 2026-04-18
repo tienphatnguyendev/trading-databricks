@@ -32,7 +32,7 @@ def push(name: str | None, stage: str) -> None:
         messages = doc["messages"]
         registered = mlflow.register_prompt(
             name=prompt_name,
-            template=messages,
+            template=messages[0]["content"],
             commit_message=f"sync from {path.name}",
         )
         if stage:
@@ -45,7 +45,7 @@ def push(name: str | None, stage: str) -> None:
 
 
 def pull(name: str, version: str | int) -> None:
-    prompt = mlflow.load_prompt(f"prompts:/{name}/{version}")
+    prompt = mlflow.load_prompt(f"prompts:/{name}@{version}")
     path = _PACKAGE_DIR / f"{name}.yaml"
     existing = yaml.safe_load(path.read_text()) if path.exists() else {"name": name}
     messages = [dict(m) for m in prompt.messages] if hasattr(prompt, "messages") else [

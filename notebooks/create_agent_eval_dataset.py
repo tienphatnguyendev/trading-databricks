@@ -4,6 +4,13 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import StringType, StructField, StructType
 
+from trading_databricks.common.uc_identifiers import (
+    BRONZE_SCHEMA,
+    DEFAULT_CATALOG,
+    NEWS_AGENT_EVAL_DATASET_TABLE,
+    quoted_table_fqn,
+)
+
 # Schema matches src/trading_databricks/news/schemas.py NEWS_RAW_SCHEMA
 NEWS_RAW_SCHEMA = StructType(
     [
@@ -29,7 +36,7 @@ def main(catalog: str, bucket: str, limit: int):
     # We read from a specific day partition to keep the read fast and cheap
     # Feel free to expand the glob pattern if you need more variance.
     source_path = f"s3://{bucket}/news/tradingview/year=2026/month=03/day=30/*.ndjson"
-    target_table = f"`{catalog}`.bronze.news_agent_eval_dataset"
+    target_table = quoted_table_fqn(catalog, BRONZE_SCHEMA, NEWS_AGENT_EVAL_DATASET_TABLE)
 
     print(f"Reading from: {source_path}")
     print(f"Writing to: {target_table}")
@@ -59,10 +66,9 @@ def main(catalog: str, bucket: str, limit: int):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Create static agent eval dataset")
-    parser.add_argument("--catalog", default="smart-trading-dev", help="Target UC catalog")
+    parser.add_argument("--catalog", default=DEFAULT_CATALOG, help="Target UC catalog")
     parser.add_argument("--bucket", default="ai-trading-raw-ap-southeast-1", help="Source S3 bucket")
     parser.add_argument("--limit", type=int, default=500, help="Number of records to sample")
     
     args = parser.parse_args()
     main(args.catalog, args.bucket, args.limit)
-.limit)

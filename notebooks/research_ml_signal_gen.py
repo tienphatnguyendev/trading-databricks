@@ -7,7 +7,7 @@
 # MAGIC an MLflow-tracked scikit-learn baseline model predicting 5-bar forward returns.
 # MAGIC
 # MAGIC **Constraints enforced:**
-# MAGIC - Reads from `trading-signal-gen-dev.bronze.raw_aggtrades_samples`
+# MAGIC - Reads from the bronze sample table via shared UC identifier constants
 # MAGIC - Uses Polars for all bar construction and feature engineering
 # MAGIC - Purely tick/bar data (no news integration in MVP)
 
@@ -24,6 +24,13 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
 
+from trading_databricks.common.uc_identifiers import (
+    BRONZE_SCHEMA,
+    DEFAULT_CATALOG,
+    RAW_AGGTRADES_SAMPLES_TABLE,
+    quoted_table_fqn,
+)
+
 # Initialize Spark Session for Databricks
 spark = SparkSession.builder.getOrCreate()
 
@@ -39,7 +46,13 @@ def extract_data_to_polars(limit: int = 2_000_000) -> pl.DataFrame:
     print(f"Extracting {limit} rows from Delta to Polars...")
     
     # Read from the Dev Bronze table
-    df_spark = spark.table("`smart-trading-dev`.`01_bronze`.`raw_aggtrades_samples`")
+    df_spark = spark.table(
+        quoted_table_fqn(
+            DEFAULT_CATALOG,
+            BRONZE_SCHEMA,
+            RAW_AGGTRADES_SAMPLES_TABLE,
+        )
+    )
     
     # Filter corrupted timestamps and parse strings to actual types
     df_spark_clean = (

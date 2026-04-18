@@ -171,6 +171,34 @@ Loss = L_treatment(predict T from φ(Z)) + L_outcome(predict Y from φ(Z), T)
 4. **Consistency:** Observed Y under T=t equals potential outcome Y(t). Discrete taxonomy with validation ensures well-defined T.
 5. **Text-as-confounder:** Z contains confounders not in X (tone, source). CausalBERT addresses this; MAS alone does not.
 
+### 2.10 Considered and Rejected: CAPITAL (Front-Door Adjustment) Framework
+
+A causal-inference-based extraction framework using Pearl's front-door adjustment was evaluated for the Causality Extractor node. The CAPITAL approach generates A=20 diverse reasoning paths at high temperature, clusters them into K=8 themes via K-means over embeddings, retrieves similar past-mistake CoTs per centroid, runs N=5 classification calls per centroid, and aggregates via:
+
+```
+P(Y|do(X)) ≈ Σ_k (|T_k|/A) · (1/N) Σ_n 𝟙(y_{k,n} = y)
+```
+
+**Rejected for the following reasons:**
+
+1. **Task mismatch.** CAPITAL outputs a scalar sentiment label (Bullish/Bearish/Neutral). Our extraction is structured `(treatment_class, mechanism, direction, evidence_spans)` with whitelist constraints. The front-door formalism does not accommodate multi-field constrained extraction.
+
+2. **Contested mediator assumption.** Front-door adjustment requires Chain-of-Thought (T) to faithfully mediate X→Y. Turpin 2023 and Lanham 2023 demonstrate CoT is frequently post-hoc narrative, violating this core theoretical assumption.
+
+3. **Conflicts with SCM design.** Our DAG models Z→T→M→Y where T is a discrete treatment class. CAPITAL confuses two different causal questions: it asks "what is the causal effect of the article on sentiment?" while our system asks "what discrete treatment class does this article describe, and through which mechanism?"
+
+4. **Cost prohibitive.** ~60 LLM calls/article (20 generation + 40 classification) vs current 1–3 calls per extraction path. At 5k articles/day post-gatekeeper, this is 300k LLM calls/day — exceeding the cost ceiling by 20×.
+
+5. **Breaks reproducibility.** Mandated high-temperature sampling produces different labels across runs, violating TRD-44 triple-barrier labeling stability requirements for walk-forward backtesting.
+
+6. **Destroys router architecture.** Replaces the ABCI-inspired 3-path uncertainty router (Module A, §2.2 of robust spec) with uniform maximum-compute treatment for all articles, eliminating the compute savings from the fast path (~60% of articles).
+
+7. **Non-auditable.** Adds K-means clustering (non-deterministic initialization) between the LLM calls and the output, making it impossible to trace why a specific label was produced when debugging extraction errors.
+
+**Partial adoption:** CAPITAL's "memory bank of past mistakes" concept is genuinely useful and orthogonal to the front-door machinery. It has been adopted into the LLM Judge Validator (`2026-04-14-llm-judge-validator-design.md` §4.2.1) as retrieval-augmented negative exemplars for the Mechanism Judge — a well-supported contrastive-prompting pattern that achieves the guardrailing benefit at zero additional LLM cost.
+
+See `2026-04-14-llm-judge-validator-design.md` §13.6 for the full rejection rationale.
+
 ---
 
 ## 3. Agent Architecture — V2 RAG-Augmented

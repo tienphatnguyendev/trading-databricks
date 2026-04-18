@@ -3,6 +3,13 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import StructType, StructField, StringType, BooleanType, LongType
 
+from trading_databricks.common.uc_identifiers import (
+    BRONZE_SCHEMA,
+    DEFAULT_CATALOG,
+    RAW_AGGTRADES_SAMPLES_TABLE,
+    quoted_table_fqn,
+)
+
 # Schema matching the raw Binance aggTrades CSV
 BINANCE_CSV_SCHEMA = StructType([
     StructField("agg_trade_id", StringType(), nullable=True),
@@ -17,8 +24,8 @@ BINANCE_CSV_SCHEMA = StructType([
 
 def main(catalog: str, file_path: str):
     spark = SparkSession.builder.getOrCreate()
-    
-    target_table = f"`{catalog}`.bronze.raw_aggTrades_samples"
+
+    target_table = quoted_table_fqn(catalog, BRONZE_SCHEMA, RAW_AGGTRADES_SAMPLES_TABLE)
 
     print(f"Reading from: {file_path}")
     print(f"Writing to: {target_table}")
@@ -68,9 +75,12 @@ def main(catalog: str, file_path: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Create static bronze tick eval dataset")
-    parser.add_argument("--catalog", default="smart-trading-dev", help="Target UC catalog")
-    parser.add_argument("--file_path", default="/Volumes/smart-trading-dev/default/uploads/BTCUSDT-aggTrades-2026-02.csv", help="Path to source CSV file in Volume")
+    parser.add_argument("--catalog", default=DEFAULT_CATALOG, help="Target UC catalog")
+    parser.add_argument(
+        "--file_path",
+        default=f"/Volumes/{DEFAULT_CATALOG}/default/uploads/BTCUSDT-aggTrades-2026-02.csv",
+        help="Path to source CSV file in Volume",
+    )
     
     args, unknown = parser.parse_known_args()
     main(args.catalog, args.file_path)
-s.file_path)

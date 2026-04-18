@@ -16,6 +16,13 @@ import pandas as pd
 from typing import TypedDict, List, Dict, Any, Optional
 from langgraph.graph import StateGraph, END
 
+from trading_databricks.common.uc_identifiers import (
+    BRONZE_SCHEMA,
+    DEFAULT_CATALOG,
+    NEWS_AGENT_EVAL_DATASET_TABLE,
+    quoted_table_fqn,
+)
+
 class NewsAgentState(TypedDict):
     article_id: str
     article_text: str
@@ -33,7 +40,13 @@ spark = SparkSession.builder.getOrCreate()
 # COMMAND ----------
 def load_eval_dataset(limit: int = 5) -> pd.DataFrame:
     """Loads the news agent eval dataset for testing."""
-    df = spark.table("`smart-trading-dev`.`01_bronze`.`news_agent_eval_dataset`")
+    df = spark.table(
+        quoted_table_fqn(
+            DEFAULT_CATALOG,
+            BRONZE_SCHEMA,
+            NEWS_AGENT_EVAL_DATASET_TABLE,
+        )
+    )
     return df.limit(limit).toPandas()
 
 # COMMAND ----------

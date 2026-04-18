@@ -8,6 +8,11 @@ import mlflow
 import polars as pl
 from pyspark.sql import SparkSession
 
+from trading_databricks.common.uc_identifiers import (
+    DOLLAR_BARS_TABLE,
+    GOLD_SCHEMA,
+    quoted_table_fqn,
+)
 from trading_databricks.ml.config import MLPipelineConfig
 from trading_databricks.ml.cusum import detect_cusum_events
 from trading_databricks.ml.labeling import compute_triple_barrier_labels
@@ -33,7 +38,7 @@ def run_training_job(config: MLPipelineConfig | None = None) -> dict:
     mlflow.set_registry_uri("databricks-uc")
 
     # 1. Load bars
-    table_name = f"{config.catalog}.gold.dollar_bars"
+    table_name = quoted_table_fqn(config.catalog, GOLD_SCHEMA, DOLLAR_BARS_TABLE)
     logger.info(f"Loading bars from {table_name}")
     try:
         bars_df = spark.read.table(table_name)

@@ -1,5 +1,7 @@
 from dataclasses import dataclass, field
 
+from trading_databricks.common.uc_identifiers import DEFAULT_CATALOG
+
 
 @dataclass(frozen=True)
 class CUSUMConfig:
@@ -56,4 +58,4 @@ class MLPipelineConfig:
     training: TrainingConfig = field(default_factory=TrainingConfig)
     inference: InferenceConfig = field(default_factory=InferenceConfig)
     symbol: str = "BTCUSDT"
-    catalog: str = "trading-signal-gen-dev"
+    catalog: str = DEFAULT_CATALOG

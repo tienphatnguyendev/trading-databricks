@@ -7,6 +7,7 @@ from trading_databricks.ml.config import (
     FeatureConfig,
     MLPipelineConfig,
 )
+from trading_databricks.common.uc_identifiers import DEFAULT_CATALOG
 
 
 def test_cusum_config_defaults() -> None:
@@ -24,7 +25,7 @@ def test_feature_config_defaults() -> None:
 def test_ml_pipeline_config_composition() -> None:
     cfg = MLPipelineConfig()
     assert cfg.symbol == "BTCUSDT"
-    assert cfg.catalog == "trading-signal-gen-dev"
+    assert cfg.catalog == DEFAULT_CATALOG
     assert isinstance(cfg.cusum, CUSUMConfig)
     assert isinstance(cfg.feature, FeatureConfig)
 
