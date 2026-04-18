@@ -1318,7 +1318,7 @@ def test_register_if_absent_skips_when_already_registered(monkeypatch):
         name = "judge_direction"
 
     monkeypatch.setattr(
-        "mlflow.genai.scorers.list_scorers",
+        "mlflow.genai.scorers.get_all_scorers",
         lambda experiment_id=None: [Existing()],
     )
     out = scorers._register_if_absent(FakeScorer(), experiment_id="exp-1")
@@ -1340,7 +1340,7 @@ def _register_if_absent(scorer_obj, *, experiment_id: str | None):
     try:
         import mlflow.genai.scorers as _gs
 
-        existing = {s.name for s in _gs.list_scorers(experiment_id=experiment_id)}
+        existing = {s.name for s in _gs.get_all_scorers(experiment_id=experiment_id)}
     except Exception:
         existing = set()
     if scorer_obj.name not in existing:

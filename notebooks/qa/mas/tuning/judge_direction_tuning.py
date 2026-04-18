@@ -45,6 +45,6 @@ result = run_evaluation(
     predict_target="e2e",
     scorers="judges",
     run_kind="tuning",
-    tags={"tuning_hypothesis": "variation"},
+    tags={"tuning_hypothesis": "direction-<describe-your-hypothesis>"},
 )
 result.tables["eval_results"].describe()
