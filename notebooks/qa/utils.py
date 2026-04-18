@@ -18,6 +18,21 @@ import plotly.io as pio
 import polars as pl
 from databricks.connect import DatabricksSession
 
+from trading_databricks.common.uc_identifiers import (
+    BRONZE_SCHEMA,
+    DEFAULT_CATALOG,
+    DOLLAR_BARS_TABLE,
+    GOLD_SCHEMA,
+    NEWS_AGENT_EVAL_DATASET_TABLE,
+    RAW_AGGTRADES_SAMPLES_TABLE,
+    quoted_table_fqn,
+)
+
+# Suppress noisy Databricks Connect v2 serverless gRPC configuration errors
+logging.getLogger("pyspark.sql.connect.logging").setLevel(logging.CRITICAL)
+logging.getLogger("pyspark.sql.connect.client.core").setLevel(logging.CRITICAL)
+logging.getLogger("urllib3.connectionpool").setLevel(logging.ERROR)
+
 # Set up McKinsey color palette theme for Plotly
 _MC_LIGHT_GRAY = "#f5f5f5"
 _MC_DARK_GRAY = "#222222"
@@ -51,6 +66,23 @@ pio.templates.default = "mckinsey"
 logger = logging.getLogger(__name__)
 
 
+RAW_AGGTRADES_SAMPLES_SOURCE = quoted_table_fqn(
+    DEFAULT_CATALOG,
+    BRONZE_SCHEMA,
+    RAW_AGGTRADES_SAMPLES_TABLE,
+)
+DOLLAR_BARS_SOURCE = quoted_table_fqn(
+    DEFAULT_CATALOG,
+    GOLD_SCHEMA,
+    DOLLAR_BARS_TABLE,
+)
+NEWS_AGENT_EVAL_DATASET_SOURCE = quoted_table_fqn(
+    DEFAULT_CATALOG,
+    BRONZE_SCHEMA,
+    NEWS_AGENT_EVAL_DATASET_TABLE,
+)
+
+
 def _git_tags() -> dict[str, str]:
     """Capture git provenance metadata; returns empty dict if git is unavailable."""
     tags: dict[str, str] = {}
@@ -70,11 +102,13 @@ def _git_tags() -> dict[str, str]:
     return tags
 
 def get_spark():
-    return DatabricksSession.builder.serverless(True).getOrCreate()
+    import os
+    profile = os.environ.get("DATABRICKS_CONFIG_PROFILE", "smart-trading-v2")
+    return DatabricksSession.builder.profile(profile).serverless(True).getOrCreate()
 
 def load_ml_training_data(limit: int | None = None) -> pl.DataFrame:
     spark = get_spark()
-    query = "SELECT * FROM `smart-trading-dev`.`01_bronze`.raw_aggtrades_samples ORDER BY timestamp"
+    query = f"SELECT * FROM {RAW_AGGTRADES_SAMPLES_SOURCE} ORDER BY timestamp"
     if limit is not None:
         query += f" LIMIT {limit}"
     return pl.from_arrow(spark.sql(query).toArrow())
@@ -83,7 +117,7 @@ def load_raw_aggtrades(limit: int | None = None) -> pl.DataFrame:
     from pyspark.sql import functions as F
 
     spark = get_spark()
-    query = "SELECT * FROM `smart-trading-dev`.`01_bronze`.raw_aggtrades_samples ORDER BY timestamp"
+    query = f"SELECT * FROM {RAW_AGGTRADES_SAMPLES_SOURCE} ORDER BY timestamp"
     if limit is not None:
         query += f" LIMIT {limit}"
     sdf = (
@@ -116,7 +150,7 @@ def _build_dollar_bars_from_bronze(symbol: str, threshold: float = 1_000_000.0, 
             f"  CAST(price AS DOUBLE) AS price, "
             f"  CAST(quantity AS DOUBLE) AS quantity, "
             f"  symbol "
-            f"FROM `smart-trading-dev`.`01_bronze`.raw_aggtrades_samples "
+            f"FROM {RAW_AGGTRADES_SAMPLES_SOURCE} "
             f"WHERE symbol = '{symbol}'"
         )
         # Bar index = Unix epoch hour — strictly monotonically increasing, unique per hour
@@ -140,9 +174,14 @@ def _build_dollar_bars_from_bronze(symbol: str, threshold: float = 1_000_000.0, 
     return pl.from_arrow(sdf.toArrow())
 
 
-def load_raw_dollar_bars(symbol: str, start: datetime | None = None, end: datetime | None = None, catalog: str = "smart-trading-dev", limit: int | None = None) -> pl.DataFrame:
+def load_raw_dollar_bars(
+    symbol: str,
+    start: datetime | None = None,
+    end: datetime | None = None,
+    limit: int | None = None,
+) -> pl.DataFrame:
     spark = get_spark()
-    query = f"SELECT * FROM `{catalog}`.`03_gold`.dollar_bars WHERE symbol = '{symbol}'"
+    query = f"SELECT * FROM {DOLLAR_BARS_SOURCE} WHERE symbol = '{symbol}'"
     if start:
         query += f" AND bar_end_time >= '{start.isoformat()}'"
     if end:
@@ -153,12 +192,20 @@ def load_raw_dollar_bars(symbol: str, start: datetime | None = None, end: dateti
     try:
         return pl.from_arrow(spark.sql(query).toArrow())
     except Exception:
-        logger.warning("03_gold.dollar_bars not found in %s — building from 01_bronze", catalog)
+        logger.warning(
+            "%s not found in %s — building from %s",
+            DOLLAR_BARS_TABLE,
+            GOLD_SCHEMA,
+            BRONZE_SCHEMA,
+        )
         return _build_dollar_bars_from_bronze(symbol, limit=limit)
 
 def load_article_sample(n: int = 10) -> list[dict]:
     spark = get_spark()
-    query = f"SELECT * FROM `smart-trading-dev`.`01_bronze`.news_agent_eval_dataset ORDER BY story_id LIMIT {n}"
+    query = (
+        f"SELECT * FROM {NEWS_AGENT_EVAL_DATASET_SOURCE} "
+        f"ORDER BY story_id LIMIT {n}"
+    )
     records = pl.from_arrow(spark.sql(query).toArrow()).to_dicts()
     return [
         {
@@ -172,15 +219,21 @@ def load_article_sample(n: int = 10) -> list[dict]:
 
 @contextmanager
 def mlflow_component_run(layer: str, component: str, params: dict | None = None):
-    mlflow.set_tracking_uri("databricks")
+    profile = os.environ.get("DATABRICKS_CONFIG_PROFILE")
+    uri = f"databricks://{profile}" if profile else "databricks"
+    mlflow.set_tracking_uri(uri)
     try:
+        import psutil
         mlflow.enable_system_metrics_logging()
-    except Exception:
+        has_psutil = True
+    except ImportError:
         logger.warning("System metrics logging unavailable (psutil not installed)")
+        mlflow.disable_system_metrics_logging()
+        has_psutil = False
     mlflow.set_experiment(f"/Shared/trading-databricks-qa/{layer}/{component}")
 
     run_name = f"{component}-{datetime.now(UTC):%Y%m%d-%H%M%S}"
-    with mlflow.start_run(run_name=run_name) as run:
+    with mlflow.start_run(run_name=run_name, log_system_metrics=has_psutil) as run:
         if params:
             mlflow.log_params(params)
         mlflow.set_tags({
@@ -541,7 +594,7 @@ def _prepare_local_graph_environment():
                 with patch("trading_databricks.agents.taxonomy.load_taxonomy", side_effect=mock_taxonomy):
                     with _patch_vs_index("success"):
                         # Patch embed_fn injection in graph to use graceful mock
-                        with patch("trading_databricks.agents.graph._mechanism_validator_node"):
+                        with patch("trading_databricks.agents.graph.mechanism_validator_node"):
                             yield
 
 
@@ -633,12 +686,22 @@ def _table_has_rows(fqn: str) -> tuple[bool, str]:
         return False, repr(e)
 
 
+def _get_vsc():
+    from databricks.sdk import WorkspaceClient
+    w = WorkspaceClient()
+    auth_header = w.config.authenticate() or {}
+    token = auth_header.get("Authorization", "").replace("Bearer ", "").strip()
+    if token:
+        return VectorSearchClient(workspace_url=w.config.host, personal_access_token=token, disable_notice=True)
+    return VectorSearchClient(disable_notice=True)
+
+
 def _vs_index_exists(*, endpoint_name: str, index_name: str) -> tuple[bool, str]:
     """Return (ok, detail) for a Databricks Vector Search index."""
     try:
         if VectorSearchClient is None:
             return False, "databricks-vectorsearch not installed"
-        vsc = VectorSearchClient()
+        vsc = _get_vsc()
         idx = vsc.get_index(endpoint_name=endpoint_name, index_name=index_name)
         desc = idx.describe()
         return True, f"describe_ok ({type(desc).__name__})"
@@ -697,7 +760,7 @@ def build_instrumented_mas_graph(config: object) -> object:
     from mlflow.entities import SpanType
 
     from trading_databricks.agents.graph import (
-        _mechanism_validator_node,
+        mechanism_validator_node,
         route_article,
     )
     from trading_databricks.agents.nodes import (
@@ -720,7 +783,7 @@ def build_instrumented_mas_graph(config: object) -> object:
     graph.add_node("few_shot_retriever",  _traced("few_shot_retriever",  lambda s: few_shot_retriever(s, config=config)))
     graph.add_node("uncertainty_router",  _traced("uncertainty_router",  lambda s: uncertainty_router(s, config=config)))
     graph.add_node("causality_extractor", _traced("causality_extractor", lambda s: causality_extractor(s, config=config)))
-    graph.add_node("mechanism_validator", _traced("mechanism_validator", lambda s: _mechanism_validator_node(s, config)))
+    graph.add_node("mechanism_validator", _traced("mechanism_validator", lambda s: mechanism_validator_node(s, config)))
 
     graph.set_entry_point("context_retriever")
     graph.add_edge("context_retriever",   "few_shot_retriever")
@@ -810,7 +873,7 @@ def wire_graph_environment(config: object, *, offline: bool):  # type: ignore[re
         import json as _json2
 
         def _real_vs_query(**kwargs: object) -> list[dict]:
-            vsc = VectorSearchClient()
+            vsc = _get_vsc()
             idx = vsc.get_index(
                 endpoint_name=config.vs_endpoint_name,  # type: ignore[attr-defined]
                 index_name=kwargs["index_name"],  # type: ignore[index]

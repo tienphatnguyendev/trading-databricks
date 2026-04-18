@@ -28,7 +28,7 @@ def route_article(state: MASState) -> Literal["causality_extractor"]:
     return "causality_extractor"
 
 
-def _mechanism_validator_node(state: MASState, config: MASConfig) -> dict:
+def mechanism_validator_node(state: MASState, config: MASConfig) -> dict:
     """Bridge validate_extraction() to the LangGraph (state) -> dict interface.
 
     validate_extraction() has a 5-arg signature incompatible with LangGraph nodes.
@@ -99,7 +99,7 @@ def build_mas_graph(*, config: MASConfig):
     graph.add_node("few_shot_retriever",  lambda s: few_shot_retriever(s, config=config))
     graph.add_node("uncertainty_router",  lambda s: uncertainty_router(s, config=config))
     graph.add_node("causality_extractor", lambda s: causality_extractor(s, config=config))
-    graph.add_node("mechanism_validator", lambda s: _mechanism_validator_node(s, config))
+    graph.add_node("mechanism_validator", lambda s: mechanism_validator_node(s, config))
 
     graph.set_entry_point("context_retriever")
     graph.add_edge("context_retriever",   "few_shot_retriever")

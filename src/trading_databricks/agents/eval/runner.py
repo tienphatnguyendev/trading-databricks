@@ -130,11 +130,11 @@ def _build_predict_fn(predict_target: PredictTarget, config):
         return wrapper
 
     if predict_target == "mechanism_validator":
-        from trading_databricks.agents.graph import _mechanism_validator_node
+        from trading_databricks.agents.graph import mechanism_validator_node
 
         def wrapper(headline: str, body: str, symbol: str, extraction: dict | None = None) -> dict:
             state = {"headline": headline, "body": body, "extraction": extraction or {}}
-            return dict(_mechanism_validator_node(state, config))
+            return dict(mechanism_validator_node(state, config))
 
         return wrapper
 
@@ -152,6 +152,7 @@ def run_evaluation(
     run_name: str | None = None,
     tags: dict[str, str] | None = None,
     run_kind: str = "baseline",
+    prompt_versions: dict[str, str] | None = None,
 ):
     """Run a MAS evaluation against an MLflow GenAI dataset.
 
@@ -161,14 +162,14 @@ def run_evaluation(
 
     from trading_databricks.agents.config import MASConfig
     from trading_databricks.agents.eval import scorers as scorer_module
-    from trading_databricks.agents.eval.dataset import build_eval_dataset
+    from trading_databricks.agents.eval.dataset import _resolve_corpus, build_eval_dataset
 
     exp_id = experiment_id or os.environ.get("MLFLOW_EXPERIMENT_ID")
     if exp_id:
         mlflow.set_experiment(experiment_id=exp_id)
 
     config = MASConfig(**(mas_config_overrides or {}))
-    data = build_eval_dataset(corpus="primary" if dataset_name.endswith("mas_eval_v1") else dataset_name)
+    data = build_eval_dataset(corpus=_resolve_corpus(dataset_name))
 
     scorer_module.ensure_judges_registered(experiment_id=exp_id)
 
@@ -197,7 +198,7 @@ def run_evaluation(
         dataset_name=dataset_name,
         dataset_version=dataset_version,
         mas_config_hash=_mas_config_hash(config),
-        prompt_versions={},
+        prompt_versions=prompt_versions or {},
         extra={**(tags or {}), "git_sha": sha7, "git_dirty": str(dirty)},
         run_kind=run_kind,
     )

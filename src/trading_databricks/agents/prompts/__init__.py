@@ -32,7 +32,7 @@ def load_prompt(name: str, version: str | int = "production") -> list[dict[str, 
     try:
         import mlflow
 
-        prompt = mlflow.load_prompt(f"prompts:/{name}/{version}")
+        prompt = mlflow.load_prompt(f"prompts:/{name}@{version}")
         if hasattr(prompt, "messages") and prompt.messages:
             return [dict(m) for m in prompt.messages]
         return [{"role": "system", "content": prompt.template}]
@@ -53,16 +53,6 @@ def render_messages(
         for m in messages
     ]
 
-
-__all__ = [
-    "load_prompt",
-    "render_messages",
-    "format_compact_taxonomy",
-    "format_full_taxonomy",
-    "format_whitelist",
-    "format_few_shot",
-    "build_system_prompt",
-]
 
 def build_system_prompt(
     taxonomy: dict[str, list[str]],
@@ -91,11 +81,7 @@ def build_system_prompt(
     careful_suffix = ""
     if path == "careful":
         # careful_suffix literal lives in YAML metadata to keep it out of Python
-        import yaml
-        from pathlib import Path
-
-        yaml_path = Path(__file__).parent / "causality_extractor_base.yaml"
-        doc = yaml.safe_load(yaml_path.read_text())
+        doc = yaml.safe_load((_PACKAGE_DIR / "causality_extractor_base.yaml").read_text())
         careful_suffix = doc.get("metadata", {}).get("careful_suffix", "")
 
     rendered = render_messages(
@@ -108,3 +94,14 @@ def build_system_prompt(
         },
     )
     return rendered[0]["content"]
+
+
+__all__ = [
+    "load_prompt",
+    "render_messages",
+    "format_compact_taxonomy",
+    "format_full_taxonomy",
+    "format_whitelist",
+    "format_few_shot",
+    "build_system_prompt",
+]

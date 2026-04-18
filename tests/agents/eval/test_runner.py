@@ -1,3 +1,5 @@
+import json
+
 from trading_databricks.agents.eval.runner import (
     _build_tags,
     _filter_scorers,
@@ -22,6 +24,19 @@ def test_build_tags_includes_required_keys():
     assert tags["run_kind"] == "tuning"
     assert tags["tuning_hypothesis"] == "add CoT"
     assert "prompt_versions" in tags  # JSON string
+
+
+def test_build_tags_prompt_versions_serialized():
+    tags = _build_tags(
+        predict_target="causality_extractor",
+        dataset_name="mas_eval_v1",
+        dataset_version="latest",
+        mas_config_hash="abc123",
+        prompt_versions={"causality_extractor_base": "3"},
+        extra=None,
+        run_kind="tuning",
+    )
+    assert json.loads(tags["prompt_versions"]) == {"causality_extractor_base": "3"}
 
 
 def test_run_name_format():

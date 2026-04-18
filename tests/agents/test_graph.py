@@ -41,10 +41,10 @@ def test_route_article_no_path():
 
 def test_mechanism_validator_node_no_extraction():
     """Returns rejected_evidence when state has no extraction."""
-    from trading_databricks.agents.graph import _mechanism_validator_node
+    from trading_databricks.agents.graph import mechanism_validator_node
 
     state: MASState = {"headline": "test", "body": "some body text"}
-    result = _mechanism_validator_node(state, MASConfig())
+    result = mechanism_validator_node(state, MASConfig())
 
     assert result["validation_status"] == "rejected_evidence"
     assert result["rejected_mechanism_raw"] is None
@@ -58,7 +58,7 @@ def test_mechanism_validator_node_accepted(
     mock_spark, mock_load_whitelist, mock_get_client
 ):
     """Returns accepted when extraction matches whitelist and evidence found in body."""
-    from trading_databricks.agents.graph import _mechanism_validator_node
+    from trading_databricks.agents.graph import mechanism_validator_node
 
     mock_load_whitelist.return_value = {
         ("Regulation", "institutional_access"): ["bullish"],
@@ -83,7 +83,7 @@ def test_mechanism_validator_node_accepted(
         "extraction": extraction,
     }
 
-    result = _mechanism_validator_node(state, MASConfig())
+    result = mechanism_validator_node(state, MASConfig())
 
     assert result["validation_status"] == "accepted"
 
