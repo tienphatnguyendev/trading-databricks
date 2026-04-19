@@ -114,3 +114,23 @@ def evidence_grounding_ratio(
         1 for span in evidence_spans if span.casefold() in body_lower
     )
     return grounded / len(evidence_spans)
+
+
+def check_evidence_quality(evidence_status: str | None) -> bool:
+    """Return True iff evidence_status is 'ok'."""
+    return evidence_status == "ok"
+
+
+def check_judge_all_pass(judge_failures: dict | None) -> bool:
+    """Return True iff judge_failures is None (all judges passed)."""
+    return judge_failures is None
+
+
+def check_reflection_triggered(reflection_count: int | None) -> bool:
+    """Return True iff at least one reflection loop ran."""
+    return (reflection_count or 0) > 0
+
+
+def check_extraction_ok(extraction_status: str | None) -> bool:
+    """Return True iff extraction completed (directly or after reflection)."""
+    return extraction_status in {"ok", "ok_after_reflection"}
