@@ -14,7 +14,6 @@ import yaml
 
 from trading_databricks.agents.config import MASConfig
 from trading_databricks.agents.nodes._client import _get_client
-from trading_databricks.agents.nodes.few_shot_retriever import get_spark_session
 from trading_databricks.agents.prompts import _PACKAGE_DIR, load_prompt, render_messages
 from trading_databricks.agents.prompts._formatters import (
     format_few_shot,
@@ -22,7 +21,6 @@ from trading_databricks.agents.prompts._formatters import (
     format_whitelist,
 )
 from trading_databricks.agents.state import MASState
-from trading_databricks.agents.taxonomy import load_taxonomy, load_whitelist
 
 logger = logging.getLogger(__name__)
 
@@ -82,17 +80,22 @@ def _load_metadata() -> dict:
     return doc.get("metadata", {})
 
 
-def hypothesis_generator(state: MASState, config: MASConfig) -> dict[str, Any]:
+def hypothesis_generator(
+    state: MASState,
+    config: MASConfig,
+    *,
+    taxonomy: dict,
+    whitelist: dict,
+) -> dict[str, Any]:
     """Generate a causal-chain extraction grounded in evidence + precedents.
+
+    taxonomy and whitelist are pre-loaded at graph construction time (see graph.py
+    build_mas_graph) — not fetched on each invocation.
 
     Returns a dict with keys:
         extraction: dict | None
         extraction_status: str  "ok" | "ok_after_reflection" | "parse_failed" | "failed"
     """
-    spark = get_spark_session()
-    taxonomy = load_taxonomy(spark, catalog=config.catalog, schema=config.schema)
-    whitelist = load_whitelist(spark, catalog=config.catalog, schema=config.schema)
-
     metadata = _load_metadata()
     judge_failures = state.get("judge_failures")
     reflection_count = state.get("reflection_count", 0)

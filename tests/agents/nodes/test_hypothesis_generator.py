@@ -18,6 +18,9 @@ VALID_EXTRACTION = {
     "reasoning": "Filing signals institutional ETF demand.",
 }
 
+_TAXONOMY = {"Regulation": ["etf_ruling"]}
+_WHITELIST = {("Regulation", "etf_inflow_demand"): ["bullish"]}
+
 
 def _base_state():
     return {
@@ -31,15 +34,9 @@ def _base_state():
     }
 
 
-@patch("trading_databricks.agents.nodes.hypothesis_generator.load_taxonomy")
-@patch("trading_databricks.agents.nodes.hypothesis_generator.load_whitelist")
-@patch("trading_databricks.agents.nodes.hypothesis_generator.get_spark_session")
 @patch("trading_databricks.agents.nodes.hypothesis_generator._get_client")
-def test_hypothesis_generator_ok(mock_get_client, mock_spark, mock_wl, mock_tax):
+def test_hypothesis_generator_ok(mock_get_client):
     from trading_databricks.agents.nodes.hypothesis_generator import hypothesis_generator
-
-    mock_tax.return_value = {"Regulation": ["etf_ruling"]}
-    mock_wl.return_value = {("Regulation", "etf_inflow_demand"): ["bullish"]}
 
     mock_client = MagicMock()
     mock_client.predict.return_value = {
@@ -47,20 +44,14 @@ def test_hypothesis_generator_ok(mock_get_client, mock_spark, mock_wl, mock_tax)
     }
     mock_get_client.return_value = mock_client
 
-    out = hypothesis_generator(_base_state(), config=MASConfig())
+    out = hypothesis_generator(_base_state(), config=MASConfig(), taxonomy=_TAXONOMY, whitelist=_WHITELIST)
     assert out["extraction_status"] == "ok"
     assert out["extraction"]["mechanism"] == "etf_inflow_demand"
 
 
-@patch("trading_databricks.agents.nodes.hypothesis_generator.load_taxonomy")
-@patch("trading_databricks.agents.nodes.hypothesis_generator.load_whitelist")
-@patch("trading_databricks.agents.nodes.hypothesis_generator.get_spark_session")
 @patch("trading_databricks.agents.nodes.hypothesis_generator._get_client")
-def test_hypothesis_generator_retries_on_parse_failure(mock_get_client, mock_spark, mock_wl, mock_tax):
+def test_hypothesis_generator_retries_on_parse_failure(mock_get_client):
     from trading_databricks.agents.nodes.hypothesis_generator import hypothesis_generator
-
-    mock_tax.return_value = {"Regulation": ["etf_ruling"]}
-    mock_wl.return_value = {("Regulation", "etf_inflow_demand"): ["bullish"]}
 
     mock_client = MagicMock()
     mock_client.predict.side_effect = [
@@ -69,40 +60,28 @@ def test_hypothesis_generator_retries_on_parse_failure(mock_get_client, mock_spa
     ]
     mock_get_client.return_value = mock_client
 
-    out = hypothesis_generator(_base_state(), config=MASConfig())
+    out = hypothesis_generator(_base_state(), config=MASConfig(), taxonomy=_TAXONOMY, whitelist=_WHITELIST)
     assert mock_client.predict.call_count == 2
     assert out["extraction_status"] == "ok"
 
 
-@patch("trading_databricks.agents.nodes.hypothesis_generator.load_taxonomy")
-@patch("trading_databricks.agents.nodes.hypothesis_generator.load_whitelist")
-@patch("trading_databricks.agents.nodes.hypothesis_generator.get_spark_session")
 @patch("trading_databricks.agents.nodes.hypothesis_generator._get_client")
-def test_hypothesis_generator_parse_failed_after_two_attempts(mock_get_client, mock_spark, mock_wl, mock_tax):
+def test_hypothesis_generator_parse_failed_after_two_attempts(mock_get_client):
     from trading_databricks.agents.nodes.hypothesis_generator import hypothesis_generator
-
-    mock_tax.return_value = {}
-    mock_wl.return_value = {}
 
     mock_client = MagicMock()
     mock_client.predict.return_value = {"choices": [{"message": {"content": "still garbage"}}]}
     mock_get_client.return_value = mock_client
 
-    out = hypothesis_generator(_base_state(), config=MASConfig())
+    out = hypothesis_generator(_base_state(), config=MASConfig(), taxonomy={}, whitelist={})
     assert mock_client.predict.call_count == 2
     assert out["extraction_status"] == "parse_failed"
     assert out["extraction"] is None
 
 
-@patch("trading_databricks.agents.nodes.hypothesis_generator.load_taxonomy")
-@patch("trading_databricks.agents.nodes.hypothesis_generator.load_whitelist")
-@patch("trading_databricks.agents.nodes.hypothesis_generator.get_spark_session")
 @patch("trading_databricks.agents.nodes.hypothesis_generator._get_client")
-def test_hypothesis_generator_includes_judge_failures_in_reflection(mock_get_client, mock_spark, mock_wl, mock_tax):
+def test_hypothesis_generator_includes_judge_failures_in_reflection(mock_get_client):
     from trading_databricks.agents.nodes.hypothesis_generator import hypothesis_generator
-
-    mock_tax.return_value = {"Regulation": ["etf_ruling"]}
-    mock_wl.return_value = {("Regulation", "etf_inflow_demand"): ["bullish"]}
 
     mock_client = MagicMock()
     mock_client.predict.return_value = {"choices": [{"message": {"content": json.dumps(VALID_EXTRACTION)}}]}
@@ -112,8 +91,7 @@ def test_hypothesis_generator_includes_judge_failures_in_reflection(mock_get_cli
     state["judge_failures"] = {"grounding": "evidence not verbatim in body"}
     state["reflection_count"] = 1
 
-    out = hypothesis_generator(state, config=MASConfig())
-    # Find the user message and verify failure context was injected
+    out = hypothesis_generator(state, config=MASConfig(), taxonomy=_TAXONOMY, whitelist=_WHITELIST)
     args, kwargs = mock_client.predict.call_args
     messages = kwargs["inputs"]["messages"]
     user_content = next(m["content"] for m in messages if m["role"] == "user")
@@ -122,20 +100,34 @@ def test_hypothesis_generator_includes_judge_failures_in_reflection(mock_get_cli
     assert out["extraction_status"] == "ok_after_reflection"
 
 
-@patch("trading_databricks.agents.nodes.hypothesis_generator.load_taxonomy")
-@patch("trading_databricks.agents.nodes.hypothesis_generator.load_whitelist")
-@patch("trading_databricks.agents.nodes.hypothesis_generator.get_spark_session")
 @patch("trading_databricks.agents.nodes.hypothesis_generator._get_client")
-def test_hypothesis_generator_failed_on_llm_exception(mock_get_client, mock_spark, mock_wl, mock_tax):
+def test_hypothesis_generator_failed_on_llm_exception(mock_get_client):
     from trading_databricks.agents.nodes.hypothesis_generator import hypothesis_generator
-
-    mock_tax.return_value = {}
-    mock_wl.return_value = {}
 
     mock_client = MagicMock()
     mock_client.predict.side_effect = RuntimeError("LLM down")
     mock_get_client.return_value = mock_client
 
-    out = hypothesis_generator(_base_state(), config=MASConfig())
+    out = hypothesis_generator(_base_state(), config=MASConfig(), taxonomy={}, whitelist={})
     assert out["extraction_status"] == "failed"
     assert out["extraction"] is None
+
+
+@patch("trading_databricks.agents.nodes.hypothesis_generator._get_client")
+def test_hypothesis_generator_accepts_preloaded_taxonomy_whitelist(mock_get_client):
+    from trading_databricks.agents.nodes.hypothesis_generator import hypothesis_generator
+
+    mock_client = MagicMock()
+    mock_client.predict.return_value = {
+        "choices": [{"message": {"content": json.dumps(VALID_EXTRACTION)}}]
+    }
+    mock_get_client.return_value = mock_client
+
+    out = hypothesis_generator(
+        _base_state(),
+        config=MASConfig(),
+        taxonomy=_TAXONOMY,
+        whitelist=_WHITELIST,
+    )
+    assert out["extraction_status"] == "ok"
+    assert out["extraction"]["mechanism"] == "etf_inflow_demand"

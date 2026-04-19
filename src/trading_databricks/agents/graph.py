@@ -30,7 +30,7 @@ from trading_databricks.agents.nodes import (
 from trading_databricks.agents.nodes.few_shot_retriever import get_spark_session
 from trading_databricks.agents.nodes.mechanism_validator import validate_extraction
 from trading_databricks.agents.state import MASState
-from trading_databricks.agents.taxonomy import load_whitelist
+from trading_databricks.agents.taxonomy import load_taxonomy, load_whitelist
 
 
 def route_article(state: MASState) -> Literal["evidence_extractor"]:
@@ -97,6 +97,10 @@ def build_mas_graph(*, config: MASConfig):
         uncertainty_router,
     )
 
+    spark = get_spark_session()
+    taxonomy = load_taxonomy(spark, catalog=config.catalog, schema=config.schema)
+    hyp_whitelist = load_whitelist(spark, catalog=config.catalog, schema=config.schema)
+
     graph = StateGraph(MASState)
 
     # Outer nodes (unchanged)
@@ -107,7 +111,10 @@ def build_mas_graph(*, config: MASConfig):
     # Sub-pipeline nodes (new)
     graph.add_node("evidence_extractor",   lambda s: evidence_extractor(s, config=config))
     graph.add_node("rag_retriever",        lambda s: rag_retriever(s, config=config))
-    graph.add_node("hypothesis_generator", lambda s: hypothesis_generator(s, config=config))
+    graph.add_node(
+        "hypothesis_generator",
+        lambda s: hypothesis_generator(s, config=config, taxonomy=taxonomy, whitelist=hyp_whitelist),
+    )
     graph.add_node("judge_panel",          lambda s: judge_panel(s, config=config))
     graph.add_node("reflector",            lambda s: reflector(s, config=config))
 
