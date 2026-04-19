@@ -72,6 +72,7 @@ class MASState(TypedDict, total=False):
 
     # --- sub-pipeline: reflector ---
     reflection_count: int
+    # internal routing signal: set by reflector, read by route_after_reflector; not a business output
     _route: str
 
     # --- validation (mechanism_validator) ---

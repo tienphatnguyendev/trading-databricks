@@ -1,6 +1,7 @@
 """LangGraph node implementations for the MAS agent pipeline."""
 from __future__ import annotations
 
+# backwards compat; not wired into the graph since 2026-04-18 (replaced by 5-node sub-pipeline)
 from trading_databricks.agents.nodes.causality_extractor import causality_extractor
 from trading_databricks.agents.nodes.context_retriever import context_retriever
 from trading_databricks.agents.nodes.evidence_extractor import evidence_extractor
