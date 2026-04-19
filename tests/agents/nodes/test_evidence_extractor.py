@@ -8,15 +8,15 @@ import pytest
 from trading_databricks.agents.config import MASConfig
 
 
-@patch("trading_databricks.agents.nodes.evidence_extractor.mlflow.deployments.get_deploy_client")
-def test_evidence_extractor_ok(mock_client_factory):
+@patch("trading_databricks.agents.nodes.evidence_extractor._get_client")
+def test_evidence_extractor_ok(mock_get_client):
     from trading_databricks.agents.nodes.evidence_extractor import evidence_extractor
 
     mock_client = MagicMock()
     mock_client.predict.return_value = {
         "choices": [{"message": {"content": '[{"actor": "BlackRock", "action": "files", "object": "spot Ether ETF", "span": "BlackRock files for spot Ether ETF", "timestamp_hint": null}]'}}]
     }
-    mock_client_factory.return_value = mock_client
+    mock_get_client.return_value = mock_client
 
     state = {"headline": "BlackRock files for spot Ether ETF", "body": "BlackRock files for spot Ether ETF with the SEC."}
     out = evidence_extractor(state, config=MASConfig())
@@ -26,15 +26,15 @@ def test_evidence_extractor_ok(mock_client_factory):
     assert out["evidence"][0]["actor"] == "BlackRock"
 
 
-@patch("trading_databricks.agents.nodes.evidence_extractor.mlflow.deployments.get_deploy_client")
-def test_evidence_extractor_empty_on_malformed_json(mock_client_factory):
+@patch("trading_databricks.agents.nodes.evidence_extractor._get_client")
+def test_evidence_extractor_empty_on_malformed_json(mock_get_client):
     from trading_databricks.agents.nodes.evidence_extractor import evidence_extractor
 
     mock_client = MagicMock()
     mock_client.predict.return_value = {
         "choices": [{"message": {"content": "not json at all"}}]
     }
-    mock_client_factory.return_value = mock_client
+    mock_get_client.return_value = mock_client
 
     out = evidence_extractor({"headline": "x", "body": "y"}, config=MASConfig())
 
@@ -42,13 +42,13 @@ def test_evidence_extractor_empty_on_malformed_json(mock_client_factory):
     assert out["evidence"] == []
 
 
-@patch("trading_databricks.agents.nodes.evidence_extractor.mlflow.deployments.get_deploy_client")
-def test_evidence_extractor_failed_on_llm_exception(mock_client_factory):
+@patch("trading_databricks.agents.nodes.evidence_extractor._get_client")
+def test_evidence_extractor_failed_on_llm_exception(mock_get_client):
     from trading_databricks.agents.nodes.evidence_extractor import evidence_extractor
 
     mock_client = MagicMock()
     mock_client.predict.side_effect = RuntimeError("LLM down")
-    mock_client_factory.return_value = mock_client
+    mock_get_client.return_value = mock_client
 
     out = evidence_extractor({"headline": "x", "body": "y"}, config=MASConfig())
 

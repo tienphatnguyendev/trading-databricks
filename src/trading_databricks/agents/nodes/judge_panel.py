@@ -17,12 +17,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any
 
-import mlflow.deployments
-
 from trading_databricks.agents.config import MASConfig
+from trading_databricks.agents.nodes._client import _get_client
 from trading_databricks.agents.prompts import load_prompt, render_messages
 from trading_databricks.agents.state import MASState
 
@@ -31,12 +29,6 @@ logger = logging.getLogger(__name__)
 
 JUDGE_NAMES = ("judge_direction", "judge_mechanism", "judge_grounding")
 JUDGE_KEYS = ("direction", "mechanism", "grounding")
-
-
-def _get_client():
-    profile = os.environ.get("DATABRICKS_CONFIG_PROFILE", os.environ.get("DATABRICKS_PROFILE", ""))
-    target_uri = f"databricks://{profile}" if profile else "databricks"
-    return mlflow.deployments.get_deploy_client(target_uri)
 
 
 def _invoke_judge(

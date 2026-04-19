@@ -8,13 +8,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any
 
-import mlflow.deployments
 import yaml
 
 from trading_databricks.agents.config import MASConfig
+from trading_databricks.agents.nodes._client import _get_client
 from trading_databricks.agents.nodes.few_shot_retriever import get_spark_session
 from trading_databricks.agents.prompts import _PACKAGE_DIR, load_prompt, render_messages
 from trading_databricks.agents.prompts._formatters import (
@@ -75,12 +74,6 @@ def _format_failure_context(judge_failures: dict | None) -> str:
     for judge_name, reason in judge_failures.items():
         lines.append(f"- {judge_name}: {reason}")
     return "\n".join(lines)
-
-
-def _get_client():
-    profile = os.environ.get("DATABRICKS_CONFIG_PROFILE", os.environ.get("DATABRICKS_PROFILE", ""))
-    target_uri = f"databricks://{profile}" if profile else "databricks"
-    return mlflow.deployments.get_deploy_client(target_uri)
 
 
 def _load_metadata() -> dict:

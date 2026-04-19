@@ -34,8 +34,8 @@ def _base_state():
 @patch("trading_databricks.agents.nodes.hypothesis_generator.load_taxonomy")
 @patch("trading_databricks.agents.nodes.hypothesis_generator.load_whitelist")
 @patch("trading_databricks.agents.nodes.hypothesis_generator.get_spark_session")
-@patch("trading_databricks.agents.nodes.hypothesis_generator.mlflow.deployments.get_deploy_client")
-def test_hypothesis_generator_ok(mock_client_factory, mock_spark, mock_wl, mock_tax):
+@patch("trading_databricks.agents.nodes.hypothesis_generator._get_client")
+def test_hypothesis_generator_ok(mock_get_client, mock_spark, mock_wl, mock_tax):
     from trading_databricks.agents.nodes.hypothesis_generator import hypothesis_generator
 
     mock_tax.return_value = {"Regulation": ["etf_ruling"]}
@@ -45,7 +45,7 @@ def test_hypothesis_generator_ok(mock_client_factory, mock_spark, mock_wl, mock_
     mock_client.predict.return_value = {
         "choices": [{"message": {"content": json.dumps(VALID_EXTRACTION)}}]
     }
-    mock_client_factory.return_value = mock_client
+    mock_get_client.return_value = mock_client
 
     out = hypothesis_generator(_base_state(), config=MASConfig())
     assert out["extraction_status"] == "ok"
@@ -55,8 +55,8 @@ def test_hypothesis_generator_ok(mock_client_factory, mock_spark, mock_wl, mock_
 @patch("trading_databricks.agents.nodes.hypothesis_generator.load_taxonomy")
 @patch("trading_databricks.agents.nodes.hypothesis_generator.load_whitelist")
 @patch("trading_databricks.agents.nodes.hypothesis_generator.get_spark_session")
-@patch("trading_databricks.agents.nodes.hypothesis_generator.mlflow.deployments.get_deploy_client")
-def test_hypothesis_generator_retries_on_parse_failure(mock_client_factory, mock_spark, mock_wl, mock_tax):
+@patch("trading_databricks.agents.nodes.hypothesis_generator._get_client")
+def test_hypothesis_generator_retries_on_parse_failure(mock_get_client, mock_spark, mock_wl, mock_tax):
     from trading_databricks.agents.nodes.hypothesis_generator import hypothesis_generator
 
     mock_tax.return_value = {"Regulation": ["etf_ruling"]}
@@ -67,7 +67,7 @@ def test_hypothesis_generator_retries_on_parse_failure(mock_client_factory, mock
         {"choices": [{"message": {"content": "garbage not json"}}]},
         {"choices": [{"message": {"content": json.dumps(VALID_EXTRACTION)}}]},
     ]
-    mock_client_factory.return_value = mock_client
+    mock_get_client.return_value = mock_client
 
     out = hypothesis_generator(_base_state(), config=MASConfig())
     assert mock_client.predict.call_count == 2
@@ -77,8 +77,8 @@ def test_hypothesis_generator_retries_on_parse_failure(mock_client_factory, mock
 @patch("trading_databricks.agents.nodes.hypothesis_generator.load_taxonomy")
 @patch("trading_databricks.agents.nodes.hypothesis_generator.load_whitelist")
 @patch("trading_databricks.agents.nodes.hypothesis_generator.get_spark_session")
-@patch("trading_databricks.agents.nodes.hypothesis_generator.mlflow.deployments.get_deploy_client")
-def test_hypothesis_generator_parse_failed_after_two_attempts(mock_client_factory, mock_spark, mock_wl, mock_tax):
+@patch("trading_databricks.agents.nodes.hypothesis_generator._get_client")
+def test_hypothesis_generator_parse_failed_after_two_attempts(mock_get_client, mock_spark, mock_wl, mock_tax):
     from trading_databricks.agents.nodes.hypothesis_generator import hypothesis_generator
 
     mock_tax.return_value = {}
@@ -86,7 +86,7 @@ def test_hypothesis_generator_parse_failed_after_two_attempts(mock_client_factor
 
     mock_client = MagicMock()
     mock_client.predict.return_value = {"choices": [{"message": {"content": "still garbage"}}]}
-    mock_client_factory.return_value = mock_client
+    mock_get_client.return_value = mock_client
 
     out = hypothesis_generator(_base_state(), config=MASConfig())
     assert mock_client.predict.call_count == 2
@@ -97,8 +97,8 @@ def test_hypothesis_generator_parse_failed_after_two_attempts(mock_client_factor
 @patch("trading_databricks.agents.nodes.hypothesis_generator.load_taxonomy")
 @patch("trading_databricks.agents.nodes.hypothesis_generator.load_whitelist")
 @patch("trading_databricks.agents.nodes.hypothesis_generator.get_spark_session")
-@patch("trading_databricks.agents.nodes.hypothesis_generator.mlflow.deployments.get_deploy_client")
-def test_hypothesis_generator_includes_judge_failures_in_reflection(mock_client_factory, mock_spark, mock_wl, mock_tax):
+@patch("trading_databricks.agents.nodes.hypothesis_generator._get_client")
+def test_hypothesis_generator_includes_judge_failures_in_reflection(mock_get_client, mock_spark, mock_wl, mock_tax):
     from trading_databricks.agents.nodes.hypothesis_generator import hypothesis_generator
 
     mock_tax.return_value = {"Regulation": ["etf_ruling"]}
@@ -106,7 +106,7 @@ def test_hypothesis_generator_includes_judge_failures_in_reflection(mock_client_
 
     mock_client = MagicMock()
     mock_client.predict.return_value = {"choices": [{"message": {"content": json.dumps(VALID_EXTRACTION)}}]}
-    mock_client_factory.return_value = mock_client
+    mock_get_client.return_value = mock_client
 
     state = _base_state()
     state["judge_failures"] = {"grounding": "evidence not verbatim in body"}
@@ -125,8 +125,8 @@ def test_hypothesis_generator_includes_judge_failures_in_reflection(mock_client_
 @patch("trading_databricks.agents.nodes.hypothesis_generator.load_taxonomy")
 @patch("trading_databricks.agents.nodes.hypothesis_generator.load_whitelist")
 @patch("trading_databricks.agents.nodes.hypothesis_generator.get_spark_session")
-@patch("trading_databricks.agents.nodes.hypothesis_generator.mlflow.deployments.get_deploy_client")
-def test_hypothesis_generator_failed_on_llm_exception(mock_client_factory, mock_spark, mock_wl, mock_tax):
+@patch("trading_databricks.agents.nodes.hypothesis_generator._get_client")
+def test_hypothesis_generator_failed_on_llm_exception(mock_get_client, mock_spark, mock_wl, mock_tax):
     from trading_databricks.agents.nodes.hypothesis_generator import hypothesis_generator
 
     mock_tax.return_value = {}
@@ -134,7 +134,7 @@ def test_hypothesis_generator_failed_on_llm_exception(mock_client_factory, mock_
 
     mock_client = MagicMock()
     mock_client.predict.side_effect = RuntimeError("LLM down")
-    mock_client_factory.return_value = mock_client
+    mock_get_client.return_value = mock_client
 
     out = hypothesis_generator(_base_state(), config=MASConfig())
     assert out["extraction_status"] == "failed"

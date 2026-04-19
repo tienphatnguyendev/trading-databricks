@@ -80,9 +80,9 @@ def test_grounding_invalid_text_fails():
 from unittest.mock import MagicMock, patch
 
 
-@patch("trading_databricks.agents.nodes.judge_panel.mlflow.deployments.get_deploy_client")
+@patch("trading_databricks.agents.nodes.judge_panel._get_client")
 @patch("mlflow.load_prompt", side_effect=Exception("not registered"))
-def test_invoke_judge_mechanism_passes_on_match_response(mock_load_prompt, mock_client_factory):
+def test_invoke_judge_mechanism_passes_on_match_response(mock_load_prompt, mock_get_client):
     """Verify _invoke_judge can render judge_mechanism without KeyError and returns
     passed=True when the LLM responds 'match'.
 
@@ -93,7 +93,7 @@ def test_invoke_judge_mechanism_passes_on_match_response(mock_load_prompt, mock_
 
     mock_client = MagicMock()
     mock_client.predict.return_value = {"choices": [{"message": {"content": "match"}}]}
-    mock_client_factory.return_value = mock_client
+    mock_get_client.return_value = mock_client
 
     result = _invoke_judge(
         "judge_mechanism",

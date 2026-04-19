@@ -8,12 +8,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from typing import Any
 
-import mlflow.deployments
-
 from trading_databricks.agents.config import MASConfig
+from trading_databricks.agents.nodes._client import _get_client
 from trading_databricks.agents.prompts import load_prompt, render_messages
 from trading_databricks.agents.state import MASState
 
@@ -36,12 +34,6 @@ def _parse_evidence(text: str) -> list[dict] | None:
     if not isinstance(parsed, list):
         return None
     return [item for item in parsed if isinstance(item, dict)]
-
-
-def _get_client():
-    profile = os.environ.get("DATABRICKS_CONFIG_PROFILE", os.environ.get("DATABRICKS_PROFILE", ""))
-    target_uri = f"databricks://{profile}" if profile else "databricks"
-    return mlflow.deployments.get_deploy_client(target_uri)
 
 
 def evidence_extractor(state: MASState, config: MASConfig) -> dict[str, Any]:
