@@ -90,7 +90,7 @@ def _interpret_judge_response(judge_name: str, text: str) -> dict[str, Any]:
             score = float(text.split()[0])
         except (ValueError, IndexError):
             return {"passed": False, "score": None, "reason": f"unparseable score: {text[:50]}"}
-        return {"passed": True, "score": score, "reason": ""}
+        return {"passed": None, "score": score, "reason": ""}
     return {"passed": False, "score": None, "reason": f"unknown judge: {judge_name}"}
 
 
