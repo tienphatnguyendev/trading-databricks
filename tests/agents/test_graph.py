@@ -14,21 +14,21 @@ def test_route_article_fast_path():
     from trading_databricks.agents.graph import route_article
 
     state: MASState = {"headline": "test", "extraction_path": "fast"}
-    assert route_article(state) == "causality_extractor"
+    assert route_article(state) == "evidence_extractor"
 
 
 def test_route_article_standard_path():
     from trading_databricks.agents.graph import route_article
 
     state: MASState = {"headline": "test", "extraction_path": "standard"}
-    assert route_article(state) == "causality_extractor"
+    assert route_article(state) == "evidence_extractor"
 
 
 def test_route_article_careful_path():
     from trading_databricks.agents.graph import route_article
 
     state: MASState = {"headline": "test", "extraction_path": "careful"}
-    assert route_article(state) == "causality_extractor"
+    assert route_article(state) == "evidence_extractor"
 
 
 def test_route_article_no_path():
@@ -36,7 +36,7 @@ def test_route_article_no_path():
     from trading_databricks.agents.graph import route_article
 
     state: MASState = {"headline": "test"}
-    assert route_article(state) == "causality_extractor"
+    assert route_article(state) == "evidence_extractor"
 
 
 def test_mechanism_validator_node_no_extraction():
@@ -88,9 +88,12 @@ def test_mechanism_validator_node_accepted(
     assert result["validation_status"] == "accepted"
 
 
+@patch("trading_databricks.agents.graph.load_whitelist", return_value={})
+@patch("trading_databricks.agents.graph.load_taxonomy", return_value={})
+@patch("trading_databricks.agents.graph.get_spark_session")
 @patch("trading_databricks.agents.nodes.few_shot_retriever.get_spark_session")
 @patch("trading_databricks.agents.nodes.few_shot_retriever.get_accepted_chain_count")
-def test_build_mas_graph_compiles(mock_count, mock_spark):
+def test_build_mas_graph_compiles(mock_count, mock_fsr_spark, mock_spark, mock_tax, mock_wl):
     """build_mas_graph() returns a CompiledStateGraph without raising."""
     from langgraph.graph.state import CompiledStateGraph
 
@@ -252,10 +255,11 @@ def _make_llm_response(article: dict) -> dict:
 
 
 @patch("trading_databricks.agents.graph.load_whitelist")
+@patch("trading_databricks.agents.graph.load_taxonomy")
 @patch("trading_databricks.agents.graph.get_spark_session")
-@patch("trading_databricks.agents.nodes.causality_extractor.get_spark_session")
-@patch("trading_databricks.agents.nodes.causality_extractor.load_taxonomy")
-@patch("trading_databricks.agents.nodes.causality_extractor.load_whitelist")
+@patch("trading_databricks.agents.nodes.rag_retriever._query_firehose", return_value=[])
+@patch("trading_databricks.agents.nodes.rag_retriever._join_market_outcomes", return_value=[])
+@patch("trading_databricks.agents.nodes.judge_panel._invoke_judge", return_value={"passed": True, "score": 0.9, "reason": ""})
 @patch("trading_databricks.agents.nodes.few_shot_retriever.get_accepted_chain_count")
 @patch("trading_databricks.agents.nodes.few_shot_retriever.get_spark_session")
 @patch("mlflow.deployments.get_deploy_client")
@@ -263,10 +267,11 @@ def test_end_to_end_fast_path(
     mock_deploy_client: MagicMock,
     mock_fsr_spark: MagicMock,
     mock_fsr_count: MagicMock,
-    mock_ext_whitelist: MagicMock,
-    mock_ext_taxonomy: MagicMock,
-    mock_ext_spark: MagicMock,
+    mock_judge: MagicMock,
+    mock_join: MagicMock,
+    mock_firehose: MagicMock,
     mock_val_spark: MagicMock,
+    mock_val_taxonomy: MagicMock,
     mock_val_whitelist: MagicMock,
 ) -> None:
     """Full graph: single article through the complete 5-node pipeline."""
@@ -277,11 +282,8 @@ def test_end_to_end_fast_path(
     # few_shot_retriever: cold start (count < 50) → returns STATIC_FEW_SHOT_EXAMPLES
     mock_fsr_count.return_value = 0
 
-    # causality_extractor mocks
-    mock_ext_taxonomy.return_value = {"Regulation": ["etf_ruling", "subcategory"]}
-    mock_ext_whitelist.return_value = _VALID_WHITELIST
-
-    # mechanism_validator mocks
+    # Pre-loaded taxonomy/whitelist at graph construction time
+    mock_val_taxonomy.return_value = {"Regulation": ["etf_ruling", "subcategory"]}
     mock_val_whitelist.return_value = _VALID_WHITELIST
 
     # Single unified client: dispatch on endpoint to avoid double-patch collision.
@@ -317,10 +319,11 @@ def test_end_to_end_fast_path(
 
 
 @patch("trading_databricks.agents.graph.load_whitelist")
+@patch("trading_databricks.agents.graph.load_taxonomy")
 @patch("trading_databricks.agents.graph.get_spark_session")
-@patch("trading_databricks.agents.nodes.causality_extractor.get_spark_session")
-@patch("trading_databricks.agents.nodes.causality_extractor.load_taxonomy")
-@patch("trading_databricks.agents.nodes.causality_extractor.load_whitelist")
+@patch("trading_databricks.agents.nodes.rag_retriever._query_firehose", return_value=[])
+@patch("trading_databricks.agents.nodes.rag_retriever._join_market_outcomes", return_value=[])
+@patch("trading_databricks.agents.nodes.judge_panel._invoke_judge", return_value={"passed": True, "score": "up", "reason": ""})
 @patch("trading_databricks.agents.nodes.few_shot_retriever.get_accepted_chain_count")
 @patch("trading_databricks.agents.nodes.few_shot_retriever.get_spark_session")
 @patch("mlflow.deployments.get_deploy_client")
@@ -328,17 +331,18 @@ def test_end_to_end_10_articles(
     mock_deploy_client: MagicMock,
     mock_fsr_spark: MagicMock,
     mock_fsr_count: MagicMock,
-    mock_ext_whitelist: MagicMock,
-    mock_ext_taxonomy: MagicMock,
-    mock_ext_spark: MagicMock,
+    mock_judge: MagicMock,
+    mock_join: MagicMock,
+    mock_firehose: MagicMock,
     mock_val_spark: MagicMock,
+    mock_val_taxonomy: MagicMock,
     mock_val_whitelist: MagicMock,
 ) -> None:
     """Full graph: all 10 articles produce a final state with validation_status."""
     from trading_databricks.agents.graph import build_mas_graph
 
     mock_fsr_count.return_value = 0
-    mock_ext_taxonomy.return_value = {
+    mock_val_taxonomy.return_value = {
         "Regulation": ["etf_ruling", "subcategory"],
         "Macro": ["subcategory"],
         "Security": ["subcategory"],
@@ -346,7 +350,6 @@ def test_end_to_end_10_articles(
         "Adoption": ["subcategory"],
         "Technology": ["subcategory"],
     }
-    mock_ext_whitelist.return_value = _VALID_WHITELIST
     mock_val_whitelist.return_value = _VALID_WHITELIST
 
     embed_resp = {"data": [{"embedding": [0.1] * 384}]}
@@ -390,3 +393,28 @@ def test_end_to_end_10_articles(
         assert "extraction_path" in result, (
             f"Missing extraction_path for: {article['headline']}"
         )
+
+@patch("trading_databricks.agents.graph.load_whitelist", return_value={})
+@patch("trading_databricks.agents.graph.load_taxonomy", return_value={})
+@patch("trading_databricks.agents.graph.get_spark_session")
+def test_build_mas_graph_includes_subpipeline_nodes(mock_spark, mock_tax, mock_wl):
+    from trading_databricks.agents.config import MASConfig
+    from trading_databricks.agents.graph import build_mas_graph
+
+    graph = build_mas_graph(config=MASConfig())
+    node_names = set(graph.get_graph().nodes.keys())
+
+    expected = {
+        "context_retriever",
+        "few_shot_retriever",
+        "uncertainty_router",
+        "evidence_extractor",
+        "rag_retriever",
+        "hypothesis_generator",
+        "judge_panel",
+        "reflector",
+        "mechanism_validator",
+    }
+    assert expected.issubset(node_names), f"missing nodes: {expected - node_names}"
+    # The monolithic causality_extractor should no longer be a graph node
+    assert "causality_extractor" not in node_names

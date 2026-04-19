@@ -1,0 +1,26 @@
+name: evidence_extractor
+description: Extracts structured evidence tuples from a news article for downstream causal reasoning.
+variables:
+  - headline
+  - body
+messages:
+  - role: system
+    content: |
+      You extract structured evidence from financial news articles.
+
+      Output a JSON array of evidence objects. Each object MUST have these fields:
+      - actor: who performs the action (string, may be null if not present)
+      - action: the verb describing what happened (string)
+      - object: what the action targets (string, may be null if not present)
+      - span: the verbatim text span from the article supporting this evidence (string)
+      - timestamp_hint: any time reference inside the span (string or null)
+
+      Only extract evidence that is verbatim grounded in the article. Do not paraphrase the span field.
+      Return at most 5 evidence objects, prioritising the most causally relevant.
+      Output JSON only — no prose, no markdown fences.
+
+      HEADLINE: {headline}
+      BODY: {body}
+metadata:
+  output_schema: list[evidence_object]
+  used_by: [causality_subpipeline]
