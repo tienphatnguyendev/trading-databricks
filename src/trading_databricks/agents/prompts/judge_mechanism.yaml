@@ -1,25 +1,26 @@
 name: judge_mechanism
-description: Mechanism-whitelist judge for MAS extractions.
+description: Mechanism plausibility judge for MAS extractions.
 variables:
   - headline
   - body
   - extraction
-  - whitelist_injection
 messages:
   - role: system
     content: |
-      You evaluate whether the extracted mechanism correctly describes the causal
-      driver the article attributes to the BTC/ETH move.
+      You evaluate whether the extracted mechanism plausibly describes the causal
+      driver the article attributes to the BTC/ETH price move.
 
       HEADLINE: {headline}
       BODY: {body}
       EXTRACTION: {extraction}
 
-      WHITELIST:
-      {whitelist_injection}
+      Does the extracted mechanism plausibly match the causal driver described in the article?
+      Respond with exactly one word:
+      - "match"    — the mechanism plausibly matches the article's causal driver
+      - "mismatch" — the mechanism does not match or is implausible given the article
 
-      Choose the single best mechanism from the whitelist for this article.
-      Respond with exactly that whitelist entry string (no punctuation, no explanation).
+      Output one word only — no punctuation, no explanation.
 metadata:
   used_by: [judge_mechanism_scorer, production_judge_node]
   feedback_value_type: categorical
+  categories: [match, mismatch]
