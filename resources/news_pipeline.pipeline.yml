@@ -16,7 +16,3 @@ resources:
         source_bucket: ${var.bucket}
       continuous: false
       development: false
-      notifications:
-        - alerts:
-            - on_flow_failure
-          email_recipients: []

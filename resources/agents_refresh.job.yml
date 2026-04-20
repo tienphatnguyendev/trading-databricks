@@ -1,0 +1,43 @@
+# Agents Pipeline + VS Refresh Job
+# Chains the SDP pipeline with a post-pipeline VS index sync.
+# Run: databricks bundle run agents_refresh --target dev
+
+resources:
+  jobs:
+    agents_refresh:
+      name: agents-refresh-${bundle.target}
+      tags:
+        domain: agents
+        purpose: pipeline-and-vs-refresh
+
+      tasks:
+        # Task 1: Run the agents SDP pipeline (full refresh)
+        - task_key: run_pipeline
+          pipeline_task:
+            pipeline_id: ${resources.pipelines.agents_pipeline.id}
+            full_refresh: false
+
+        # Task 2: Refresh VS staging table + trigger index sync
+        - task_key: refresh_vs_index
+          depends_on:
+            - task_key: run_pipeline
+          notebook_task:
+            notebook_path: ../src/notebooks/agents_vs_refresh.ipynb
+            base_parameters:
+              catalog: ${var.catalog}
+              gold_schema: ${var.gold_schema}
+              vs_endpoint: mas-few-shot
+              vs_index: ${var.catalog}.${var.gold_schema}.causal_chains_idx
+          # Serverless compute for the notebook task
+          environment_key: default
+
+      environments:
+        - environment_key: default
+          spec:
+            client: "1"
+
+      # No schedule — triggered manually or via CI after pipeline runs.
+      # Uncomment below to schedule (e.g., daily at 06:00 UTC):
+      # schedule:
+      #   quartz_cron_expression: '0 0 6 * * ?'
+      #   timezone_id: UTC
