@@ -9,6 +9,8 @@ import polars as pl
 def build_time_bars(
     df: pl.DataFrame,
     interval_minutes: int,
+    *,
+    assume_sorted: bool = False,
 ) -> pl.DataFrame:
     """Aggregate tick data into fixed time-interval OHLCV bars.
 
@@ -16,14 +18,18 @@ def build_time_bars(
     ----------
     df : Polars DataFrame with columns: transact_timestamp, price_d, qty_d
     interval_minutes : bar width in minutes
+    *
+    assume_sorted : if True, skip sorting (data already sorted by transact_timestamp)
 
     Returns
     -------
     Polars DataFrame with: bucket, open, high, low, close, volume, trade_count
     """
+    if not assume_sorted:
+        df = df.sort("transact_timestamp")
+    
     return (
-        df.sort("transact_timestamp")
-        .group_by_dynamic("transact_timestamp", every=f"{interval_minutes}m")
+        df.group_by_dynamic("transact_timestamp", every=f"{interval_minutes}m")
         .agg(
             pl.col("price_d").first().alias("open"),
             pl.col("price_d").max().alias("high"),
@@ -42,6 +48,7 @@ def build_threshold_bars(
     column: str,
     *,
     bar_type: str = "volume",
+    assume_sorted: bool = False,
 ) -> pl.DataFrame:
     """Build volume, dollar, or tick bars using vectorized prefix-sum + searchsorted.
 
@@ -63,13 +70,14 @@ def build_threshold_bars(
     column    : "qty_d" for volume, "dollar_d" for dollar, "tick" for tick bars
     *
     bar_type  : label for the bar type (keyword-only, used in error messages)
+    assume_sorted : if True, skip sorting (data already sorted by transact_timestamp)
 
     Returns
     -------
     Polars DataFrame with: bucket, open, high, low, close, volume, trade_count
     """
-    # 1. Sort defensively and compute cumulative sum
-    sorted_df = df.sort("transact_timestamp")
+    # 1. Sort defensively (if needed) and compute cumulative sum
+    sorted_df = df if assume_sorted else df.sort("transact_timestamp")
     n = sorted_df.height
 
     if column == "tick":
