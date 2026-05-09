@@ -19,6 +19,9 @@ from btcusdt_utils.evaluation.plots import (
     plot_confusion_matrix,
     plot_feature_importance,
     plot_calibration,
+    plot_cv_comparison,
+    plot_meta_labeling_dashboard,
+    plot_regime_analysis,
 )
 
 __all__ = [
@@ -27,4 +30,7 @@ __all__ = [
     "plot_roc_curves", "plot_precision_recall",
     "plot_confusion_matrix", "plot_feature_importance",
     "plot_calibration",
+    "plot_cv_comparison",
+    "plot_meta_labeling_dashboard",
+    "plot_regime_analysis",
 ]
