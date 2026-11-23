@@ -15,6 +15,6 @@ resources:
         gold_schema: ${var.gold_schema}
         # Source root for sys.path — SDP serverless doesn't resolve
         # the trading_databricks package automatically.
-        src_root: /Workspace/Users/aaronng.dev1@gmail.com/trading-databricks/src
+        src_root: ${workspace.file_path}/src
       continuous: false
       development: false

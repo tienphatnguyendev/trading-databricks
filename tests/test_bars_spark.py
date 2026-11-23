@@ -18,6 +18,8 @@ Usage:
 
 from __future__ import annotations
 
+import os
+import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -53,17 +55,35 @@ from btcusdt_utils.bars_spark import (
 # ══════════════════════════════════════════════════════════════════════════
 
 
-@pytest.fixture(scope="module")
-def spark() -> SparkSession:
-    """Create Spark session for tests."""
-    spark = (
-        SparkSession.builder.appName("test_bars_spark")
-        .master("local[2]")
-        .config("spark.sql.shuffle.partitions", "2")
-        .getOrCreate()
+def test_bar_import_and_root_export_without_optional_statsmodels():
+    """Bar construction works without optional stationarity dependencies."""
+    script = """
+import sys
+from datetime import datetime
+
+sys.modules["statsmodels"] = None
+
+import polars as pl
+from btcusdt_utils import build_time_bars
+
+ticks = pl.DataFrame({
+    "transact_timestamp": [datetime(2024, 1, 1), datetime(2024, 1, 1, 0, 0, 1)],
+    "price_d": [100.0, 102.0],
+    "qty_d": [1.0, 2.0],
+})
+bar = build_time_bars(ticks, interval_minutes=1).row(0, named=True)
+assert (bar["open"], bar["close"], bar["volume"], bar["trade_count"]) == (
+    100.0, 102.0, 3.0, 2,
+)
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        env=os.environ | {"PYTHONPATH": str(notebooks_path)},
+        capture_output=True,
+        text=True,
+        check=False,
     )
-    yield spark
-    spark.stop()
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.fixture

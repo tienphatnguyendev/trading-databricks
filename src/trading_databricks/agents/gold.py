@@ -12,10 +12,14 @@ This module is imported by agents/pipeline.py — no logic lives there.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Literal
 
+import pandas as pd
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
+
+from trading_databricks.agents.config import GatekeeperConfig
 from trading_databricks.common.uc_identifiers import SILVER_SCHEMA, quoted_table_fqn
 
 
@@ -82,12 +86,10 @@ def _apply_sql_gatekeeper(df: DataFrame) -> DataFrame:
     )
 
 
-def _apply_spacy_gatekeeper(
-    df: DataFrame, config: "GatekeeperConfig",
-) -> DataFrame:
-    """Filter to crypto-relevant articles via spacy EntityRuler UDF."""
-    import pandas as pd
+def _make_gatekeeper_udf(config: GatekeeperConfig) -> Callable:
+    """Return the crypto-relevance UDF used by notebook and pipeline callers."""
     from pyspark.sql.types import BooleanType
+
     from trading_databricks.agents.gatekeeper import is_crypto_relevant
 
     @F.pandas_udf(BooleanType())
@@ -102,14 +104,33 @@ def _apply_spacy_gatekeeper(
             results.append(bool(is_impactful))
         return pd.Series(results, dtype=object)
 
+    return gatekeeper_udf
+
+
+def _apply_spacy_gatekeeper(
+    df: DataFrame, config: GatekeeperConfig,
+) -> DataFrame:
+    """Filter to crypto-relevant articles via spacy EntityRuler UDF."""
+    gatekeeper_udf = _make_gatekeeper_udf(config)
     return df.filter(gatekeeper_udf(F.col("headline"), F.col("body")))
+
+
+def news_firehose_transform(df: DataFrame) -> DataFrame:
+    """Project cleaned news for headline embedding in Vector Search."""
+    return df.select(
+        "story_id",
+        "headline",
+        F.substring("body", 1, 500).alias("body_truncated"),
+        "published_at",
+        "source",
+    )
 
 
 def news_causal_features_transform(
     spark: SparkSession,
     *,
     catalog: str,
-    gatekeeper_config: "GatekeeperConfig | None" = None,
+    gatekeeper_config: GatekeeperConfig | None = None,
     gatekeeper_mode: Literal["spacy", "sql"] = "spacy",
 ) -> DataFrame:
     """Build the news_causal_features DataFrame plan.
@@ -136,15 +157,8 @@ def news_causal_features_transform(
         filtered = _apply_sql_gatekeeper(cleaned)
     else:
         if gatekeeper_config is None:
-            from trading_databricks.agents.config import GatekeeperConfig
             gatekeeper_config = GatekeeperConfig()
         filtered = _apply_spacy_gatekeeper(cleaned, gatekeeper_config)
-
-    # Limit to recent articles to keep ai_query volume manageable on
-    # serverless SDP (avoid cluster timeout on large backlogs).
-    filtered = filtered.filter(
-        F.col("published_at") >= F.current_timestamp() - F.expr("INTERVAL 7 DAYS")
-    )
 
     # With failOnError => false, ai_query returns:
     #   STRUCT<result: STRUCT<...model output...>, errorMessage: STRING>

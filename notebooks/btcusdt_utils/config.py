@@ -10,7 +10,7 @@ Usage
 from btcusdt_utils.config import NotebookConfig
 
 cfg = NotebookConfig()
-print(cfg.aggtrades_path)  # `smart_trading_dev`.`01_bronze`.`aggtrades`
+print(cfg.aggtrades_path)  # `smart-trading-dev`.`01_bronze`.`raw_aggtrades_samples`
 print(cfg.training.train_ratio)  # 0.60
 print(cfg.training.optuna_trials)  # 20
 ```
@@ -56,8 +56,8 @@ class CatalogConfig:
     gold: str = GOLD
     
     # Table names (without schema prefix)
-    aggtrades_table: str = "aggtrades"
-    news_table: str = "raw_news"
+    aggtrades_table: str = "raw_aggtrades_samples"
+    news_table: str = "news_agent_eval_dataset"
     
     @property
     def aggtrades_path(self) -> str:
@@ -252,7 +252,7 @@ class NotebookConfig:
     Default configuration:
     >>> cfg = NotebookConfig()
     >>> cfg.aggtrades_path
-    '`smart_trading_dev`.`01_bronze`.`aggtrades`'
+    '`smart-trading-dev`.`01_bronze`.`raw_aggtrades_samples`'
     
     Custom configuration:
     >>> cfg = NotebookConfig(

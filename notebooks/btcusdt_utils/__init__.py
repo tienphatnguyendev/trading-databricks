@@ -23,138 +23,117 @@ training/     : Optuna hyperparameter tuning + MLflow logging + Purged/Walk-Forw
 sampling/     : Uniqueness weights, return attribution, sequential bootstrap
 """
 
-__version__ = "0.11.0"  # Bumped: added sampling module (uniqueness weights, sequential bootstrap)
+from importlib import import_module
 
-# ── Flat modules ─────────────────────────────────────────────────────────
-from btcusdt_utils.constants import (
-    CATALOG, VOLUME, BRONZE, SILVER, GOLD,
-    RAW_AGGTRADES, RAW_AGGTRADES_PATH,
-    RAW_NEWS, RAW_NEWS_PATH,
-)
-from btcusdt_utils.config import (
-    CatalogConfig,
-    TrainingConfig,
-    VisualizationConfig,
-    MLflowConfig,
-    BarSamplingConfig,
-    TripleBarrierConfig,
-    NotebookConfig,
-)
-from btcusdt_utils.viz import (
-    _BG, _BG_CARD, _TEXT, _TEXT_MUT, _GRID,
-    _RED, _GREEN, _BLUE, _ORANGE, _PURPLE, _CYAN,
-    _FONT, DARK_LAYOUT, dark_fig,
-    # Phase 2 dashboard builders (NEW)
-    plot_ptsl_heatmap,
-    plot_touch_bar_histogram,
-    plot_sweep_dashboard,
-)
-from btcusdt_utils.quality import (
-    BarQuality, LabelQuality,
-    compute_bar_quality, compute_label_quality,
-    label_entropy, label_avg_uniqueness,
-)
-from btcusdt_utils.stationarity import (
-    adf_test, kpss_test, ffd, find_min_ffd,
-)
-from btcusdt_utils.bars import (
-    build_time_bars, build_threshold_bars, cusum_filter,
-)
-from btcusdt_utils.labeling import apply_triple_barrier
-from btcusdt_utils.labeling_sweep import (
-    SweepConfig, SweepResult, SweepStats, SweepReporter,
-    run_triple_barrier_sweep, prune_label_arrays,
-)
-from btcusdt_utils.labeling_analysis import (
-    GapAnalysisTarget, GapAnalysisResult,
-    build_sweep_dataframe, build_heatmap_data, analyze_gaps,
-    filter_top_n, filter_by_vol_span, get_top_n_configs,
-)
-from btcusdt_utils.labeling_meta import (
-    MetaLabelConfig,
-    generate_meta_labels,
-    create_meta_features,
-)
-from btcusdt_utils.tracking import (  # NEW
-    ExperimentConfig,
-    MLflowTracker,
-)
-from btcusdt_utils.reporting import (  # NEW
-    print_section_header,
-    print_subsection,
-    print_top_configs_table,
-    print_gap_analysis_table,
-    print_label_distribution,
-    print_feature_scores,
-    print_cv_results,
-)
 
-# ── Features subpackage ───────────────────────────────────────────────────────
-from btcusdt_utils.features import (
-    TechnicalConfig, MicrostructureConfig, EntropyConfig, StructuralConfig,
-    compute_technical_indicators,
-    compute_microstructure_features,
-    compute_entropy_features,
-    compute_structural_features,
-)
+__version__ = "0.11.0"
 
-# ── Scoring subpackage ────────────────────────────────────────────────────────
-try:
-    from btcusdt_utils.scoring import (
-        ScoringConfig, NoiseFloor,
-        compute_mi_scores, compute_noise_floor,
-        compute_univariate_auc,
-        WeightsConfig,
-        compute_concurrency, compute_sample_weights,
-        sequential_bootstrap,
-    )
-except ImportError:
-    pass  # available after `%pip install lightgbm scikit-learn`
+# Resolve root-level convenience exports only when callers request them.
+# Importing bars must not require optional training or statistics libraries.
+_MODULE_EXPORTS = {
+    'constants': (
+        'CATALOG', 'VOLUME', 'BRONZE',
+        'SILVER', 'GOLD', 'RAW_AGGTRADES',
+        'RAW_AGGTRADES_PATH', 'RAW_NEWS', 'RAW_NEWS_PATH',
+    ),
+    'config': (
+        'CatalogConfig', 'TrainingConfig', 'VisualizationConfig',
+        'MLflowConfig', 'BarSamplingConfig', 'TripleBarrierConfig',
+        'NotebookConfig',
+    ),
+    'viz': (
+        '_BG', '_BG_CARD', '_TEXT',
+        '_TEXT_MUT', '_GRID', '_RED',
+        '_GREEN', '_BLUE', '_ORANGE',
+        '_PURPLE', '_CYAN', '_FONT',
+        'DARK_LAYOUT', 'dark_fig', 'plot_ptsl_heatmap',
+        'plot_touch_bar_histogram', 'plot_sweep_dashboard',
+    ),
+    'quality': (
+        'BarQuality', 'LabelQuality', 'compute_bar_quality',
+        'compute_label_quality', 'label_entropy', 'label_avg_uniqueness',
+    ),
+    'stationarity': (
+        'adf_test', 'kpss_test', 'ffd',
+        'find_min_ffd',
+    ),
+    'bars': (
+        'build_time_bars', 'build_threshold_bars', 'cusum_filter',
+    ),
+    'labeling': (
+        'apply_triple_barrier',
+    ),
+    'labeling_sweep': (
+        'SweepConfig', 'SweepResult', 'SweepStats',
+        'SweepReporter', 'run_triple_barrier_sweep', 'prune_label_arrays',
+    ),
+    'labeling_analysis': (
+        'GapAnalysisTarget', 'GapAnalysisResult', 'build_sweep_dataframe',
+        'build_heatmap_data', 'analyze_gaps', 'filter_top_n',
+        'filter_by_vol_span', 'get_top_n_configs',
+    ),
+    'labeling_meta': (
+        'MetaLabelConfig', 'generate_meta_labels', 'create_meta_features',
+    ),
+    'tracking': (
+        'ExperimentConfig', 'MLflowTracker',
+    ),
+    'reporting': (
+        'print_section_header', 'print_subsection', 'print_top_configs_table',
+        'print_gap_analysis_table', 'print_label_distribution', 'print_feature_scores',
+        'print_cv_results',
+    ),
+    'features': (
+        'TechnicalConfig', 'MicrostructureConfig', 'EntropyConfig',
+        'StructuralConfig', 'compute_technical_indicators', 'compute_microstructure_features',
+        'compute_entropy_features', 'compute_structural_features',
+    ),
+    'sampling': (
+        'compute_avg_uniqueness', 'compute_return_attribution_weights', 'get_ind_matrix',
+    ),
+    'trading': (
+        'kelly_bet_size', 'linear_bet_size', 'bet_size_from_meta_prob',
+    ),
+    'scoring': (
+        'ScoringConfig', 'NoiseFloor', 'compute_mi_scores',
+        'compute_noise_floor', 'compute_univariate_auc', 'WeightsConfig',
+        'compute_concurrency', 'compute_sample_weights', 'sequential_bootstrap',
+    ),
+    'evaluation': (
+        'BaselineResult', 'compute_metrics', 'compute_baselines',
+        'build_comparison_table', 'plot_roc_curves', 'plot_precision_recall',
+        'plot_confusion_matrix', 'plot_feature_importance', 'plot_calibration',
+        'plot_cv_comparison', 'plot_meta_labeling_dashboard', 'plot_regime_analysis',
+    ),
+    'training': (
+        'ModelConfig', 'TrainResult', 'create_lgb_objective',
+        'create_xgb_objective', 'create_rf_objective', 'create_lr_objective',
+        'create_dt_objective', 'default_model_configs', 'train_and_evaluate',
+        'DEFAULT_N_TRIALS', 'DEFAULT_SEED', 'DEFAULT_EARLY_STOPPING_ROUNDS',
+        'PurgedCVConfig', 'PurgedKFoldCV', 'walk_forward_cv',
+    ),
+}
+_EXPORTS = {
+    name: (module, name)
+    for module, names in _MODULE_EXPORTS.items()
+    for name in names
+} | {
+    'compute_sample_weights_v2': ('sampling', 'compute_sample_weights'),
+    'sequential_bootstrap_v2': ('sampling', 'sequential_bootstrap'),
+}
 
-# ── Sampling subpackage (NEW) ──────────────────────────────────────────────────
-from btcusdt_utils.sampling import (
-    compute_avg_uniqueness,
-    compute_sample_weights as compute_sample_weights_v2,  # Avoid conflict with scoring
-    compute_return_attribution_weights,
-    sequential_bootstrap as sequential_bootstrap_v2,  # Avoid conflict with scoring
-    get_ind_matrix,
-)
 
-# ── Evaluation subpackage ──────────────────────────────────────────────────────
-try:
-    from btcusdt_utils.evaluation import (
-        BaselineResult,
-        compute_metrics, compute_baselines,
-        build_comparison_table,
-        plot_roc_curves, plot_precision_recall,
-        plot_confusion_matrix, plot_feature_importance,
-        plot_calibration,
-        plot_cv_comparison,
-        plot_meta_labeling_dashboard,
-        plot_regime_analysis,
-    )
-except ImportError:
-    pass
+def __getattr__(name: str):
+    """Load a convenience export while preserving dependency import errors."""
+    try:
+        module_name, attribute_name = _EXPORTS[name]
+    except KeyError:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}") from None
+    module = import_module(f".{module_name}", __name__)
+    value = getattr(module, attribute_name)
+    globals()[name] = value
+    return value
 
-# ── Training subpackage ───────────────────────────────────────────────────────
-try:
-    from btcusdt_utils.training import (
-        ModelConfig, TrainResult,
-        create_lgb_objective, create_xgb_objective,
-        create_rf_objective, create_lr_objective, create_dt_objective,
-        default_model_configs, train_and_evaluate,
-        DEFAULT_N_TRIALS, DEFAULT_SEED, DEFAULT_EARLY_STOPPING_ROUNDS,
-        PurgedCVConfig, PurgedKFoldCV, walk_forward_cv,
-    )
-except ImportError:
-    pass
-
-# ── Trading subpackage ───────────────────────────────────────────────────────
-from btcusdt_utils.trading import (
-    kelly_bet_size,
-    linear_bet_size,
-    bet_size_from_meta_prob,
-)
 
 __all__ = [
     "__version__",

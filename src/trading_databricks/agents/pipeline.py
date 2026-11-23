@@ -2,13 +2,12 @@
 
 Pipeline DAG (all materialized views — full batch recompute):
 
-  02_silver.news_cleaned       ← bronze.raw_news → clean_news() + dedup(story_id)
   02_silver.news_chunks        ← silver.news_cleaned → hierarchical chunking
   03_gold.news_firehose        ← silver projection for VS firehose index
   03_gold.news_causal_features ← gatekeeper → ai_query('mas-news-causal') → 23 fields
 
 External dependencies:
-  - 01_bronze.raw_news must exist (48,550 source articles)
+  - 02_silver.news_cleaned must exist (owned by the news pipeline)
   - mas-news-causal Model Serving endpoint must be live (for ai_query)
   - 03_gold.treatment_taxonomy + mechanism_whitelist must be seeded
 
@@ -28,54 +27,23 @@ if _src_root not in sys.path:
     sys.path.insert(0, _src_root)
 
 from pyspark import pipelines as dp
-from pyspark.sql import functions as F
-from pyspark.sql.window import Window
 
-from trading_databricks.agents.gold import news_causal_features_transform
-from trading_databricks.news.silver import clean_news
+from trading_databricks.agents.gold import (
+    news_causal_features_transform,
+    news_firehose_transform,
+)
+from trading_databricks.agents.silver import news_chunks_transform
 
 # ── Pipeline configuration (injected by DABs at runtime) ─────────────────────
 
 catalog = spark.conf.get("catalog")  # noqa: F821
-bronze_schema = spark.conf.get("bronze_schema")
 silver_schema = spark.conf.get("silver_schema")
 gold_schema = spark.conf.get("gold_schema")
 
 # ── Data quality expectations ─────────────────────────────────────────────
 
 _VALID_STORY_ID = "story_id IS NOT NULL"
-_VALID_HEADLINE = "headline IS NOT NULL AND LENGTH(TRIM(headline)) > 0"
 _VALID_CHUNK_TEXT = "chunk_text IS NOT NULL AND LENGTH(TRIM(chunk_text)) > 0"
-
-# ── Silver ────────────────────────────────────────────────────────────────
-
-
-@dp.materialized_view(
-    name=f"{silver_schema}.news_cleaned",
-    comment="Deduplicated, cast, and normalised news records (batch from raw_news).",
-    cluster_by=["published_at"],
-)
-@dp.expect_or_drop("valid_story_id", _VALID_STORY_ID)
-@dp.expect_or_drop("valid_headline", _VALID_HEADLINE)
-def silver_news_cleaned():  # noqa: ANN201
-    """Silver MV: batch clean + deduplicate from bronze.raw_news.
-
-    Applies clean_news() chain (timestamps, text normalization, provider
-    flattening), then deduplicates by story_id (SCD Type 1 — latest
-    scraped_at wins).
-    """
-    cleaned = clean_news(
-        spark.table(f"`{catalog}`.`{bronze_schema}`.raw_news")  # noqa: F821
-    )
-    # SCD Type 1 dedup: keep latest scraped_at per story_id
-    w = Window.partitionBy("story_id").orderBy(F.col("scraped_at").desc())
-    return (
-        cleaned
-        .withColumn("_rn", F.row_number().over(w))
-        .filter(F.col("_rn") == 1)
-        .drop("_rn")
-    )
-
 
 # ── Silver: News Chunks ───────────────────────────────────────────────────
 
@@ -88,174 +56,8 @@ def silver_news_cleaned():  # noqa: ANN201
 @dp.expect_or_drop("valid_story_id", _VALID_STORY_ID)
 @dp.expect_or_drop("valid_chunk_text", _VALID_CHUNK_TEXT)
 def silver_news_chunks():  # noqa: ANN201
-    """Silver MV: hierarchical chunking of cleaned news articles.
-
-    Applies chunk_article() via scalar UDF to split each article into:
-      - headline chunk (always full)
-      - lead paragraph chunk (first ~300 chars to sentence boundary)
-      - body window chunks (384-token sliding windows with 64-token overlap)
-
-    The UDF is self-contained (all logic inlined) so cloudpickle can
-    serialize it to SDP serverless executors without external imports.
-
-    Output schema: chunk_id, story_id, chunk_index, chunk_text,
-    chunk_type, token_count, published_at, source.
-    """
-    from pyspark.sql.types import (
-        ArrayType,
-        IntegerType,
-        StringType,
-        StructField,
-        StructType,
-    )
-
-    _chunk_schema = ArrayType(
-        StructType([
-            StructField("chunk_index", IntegerType(), nullable=False),
-            StructField("chunk_text", StringType(), nullable=False),
-            StructField("chunk_type", StringType(), nullable=False),
-            StructField("token_count", IntegerType(), nullable=False),
-        ])
-    )
-
-    # ── Chunking config (captured in closure, no external import needed) ──
-    _MAX_CHUNK_TOKENS = 384
-    _OVERLAP_TOKENS = 64
-    _LEAD_CHARS = 300
-    _MIN_CHUNK_CHARS = 50
-    _CHARS_PER_TOKEN = 3.5
-    _SEPARATORS = ("\n\n", "\n", ". ", ", ", " ")
-
-    # ── Self-contained chunking logic (inlined for executor serialization) ──
-    def _estimate_tokens(text):
-        return int(len(text) / _CHARS_PER_TOKEN) + 1
-
-    def _hard_split(text, max_chars, overlap_chars):
-        chunks = []
-        start = 0
-        step = max(max_chars - overlap_chars, 1)
-        while start < len(text):
-            end = min(start + max_chars, len(text))
-            chunks.append(text[start:end])
-            start += step
-        return chunks
-
-    def _split_recursive(text, max_chars, overlap_chars, separators):
-        if len(text) <= max_chars:
-            return [text]
-        for sep_idx, sep in enumerate(separators):
-            parts = text.split(sep)
-            if len(parts) <= 1:
-                continue
-            chunks = []
-            current = ""
-            for part in parts:
-                candidate = f"{current}{sep}{part}" if current else part
-                if len(candidate) <= max_chars:
-                    current = candidate
-                else:
-                    if current:
-                        chunks.append(current)
-                    if len(part) > max_chars:
-                        remaining = separators[sep_idx + 1:]
-                        if remaining:
-                            sub = _split_recursive(part, max_chars, overlap_chars, remaining)
-                        else:
-                            sub = _hard_split(part, max_chars, overlap_chars)
-                        chunks.extend(sub[:-1])
-                        current = sub[-1] if sub else ""
-                    else:
-                        if overlap_chars > 0 and current:
-                            overlap = current[-overlap_chars:]
-                            current = overlap + sep + part
-                            if len(current) > max_chars:
-                                current = part
-                        else:
-                            current = part
-            if current:
-                if len(current) > max_chars:
-                    chunks.extend(_hard_split(current, max_chars, overlap_chars))
-                else:
-                    chunks.append(current)
-            if chunks:
-                return chunks
-        return _hard_split(text, max_chars, overlap_chars)
-
-    def _chunk_article(headline, body):
-        max_chars = int(_MAX_CHUNK_TOKENS * _CHARS_PER_TOKEN)
-        overlap_chars = int(_OVERLAP_TOKENS * _CHARS_PER_TOKEN)
-        chunks = []
-        idx = 0
-        # Chunk 0: Headline
-        if headline and headline.strip():
-            h = headline.strip()
-            chunks.append({
-                "chunk_index": idx, "chunk_text": h,
-                "chunk_type": "headline", "token_count": _estimate_tokens(h),
-            })
-            idx += 1
-        if not body or not body.strip():
-            return chunks
-        body = body.strip()
-        # Chunk 1: Lead paragraph
-        lead_end = min(_LEAD_CHARS, len(body))
-        for i in range(lead_end, min(lead_end + 100, len(body))):
-            if body[i] in ".!?\n":
-                lead_end = i + 1
-                break
-        lead = body[:lead_end].strip()
-        if len(lead) >= _MIN_CHUNK_CHARS:
-            if len(lead) > max_chars:
-                lead = lead[:max_chars].strip()
-            chunks.append({
-                "chunk_index": idx, "chunk_text": lead,
-                "chunk_type": "lead", "token_count": _estimate_tokens(lead),
-            })
-            idx += 1
-        # Chunks 2..N: Body windows
-        remainder = body[lead_end:].strip()
-        if len(remainder) >= _MIN_CHUNK_CHARS:
-            windows = _split_recursive(remainder, max_chars, overlap_chars, _SEPARATORS)
-            for window in windows:
-                window = window.strip()
-                if len(window) >= _MIN_CHUNK_CHARS:
-                    chunks.append({
-                        "chunk_index": idx, "chunk_text": window,
-                        "chunk_type": "body_window",
-                        "token_count": _estimate_tokens(window),
-                    })
-                    idx += 1
-        return chunks
-
-    @F.udf(returnType=_chunk_schema)
-    def _chunk_udf(headline: str, body: str) -> list:
-        h = str(headline) if headline is not None else ""
-        b = str(body) if body is not None else ""
-        return _chunk_article(h, b)
-
-    cleaned = spark.table(  # noqa: F821
-        f"`{catalog}`.`{silver_schema}`.news_cleaned"
-    )
-
-    return (
-        cleaned
-        .withColumn("_chunks", _chunk_udf(F.col("headline"), F.col("body")))
-        .select(
-            F.col("story_id"),
-            F.col("published_at"),
-            F.col("source"),
-            F.explode("_chunks").alias("_chunk"),
-        )
-        .select(
-            F.concat_ws("_", F.col("story_id"), F.col("_chunk.chunk_index").cast("string")).alias("chunk_id"),
-            F.col("story_id"),
-            F.col("_chunk.chunk_index").alias("chunk_index"),
-            F.col("_chunk.chunk_text").alias("chunk_text"),
-            F.col("_chunk.chunk_type").alias("chunk_type"),
-            F.col("_chunk.token_count").alias("token_count"),
-            F.col("published_at"),
-            F.col("source"),
-        )
+    return news_chunks_transform(
+        spark.table(f"`{catalog}`.`{silver_schema}`.news_cleaned")  # noqa: F821
     )
 
 
@@ -268,23 +70,8 @@ def silver_news_chunks():  # noqa: ANN201
     cluster_by=["published_at"],
 )
 def gold_news_firehose():  # noqa: ANN201
-    """Projection of cleaned news for the VS news_firehose_idx Delta Sync index.
-
-    Columns: story_id (PK), headline (VS embedding source), body_truncated,
-    published_at, source.  VS Delta Sync embeds headline via
-    databricks-gte-large-en at sync time — no manual ai_query needed.
-    """
-    return (
-        spark.table(  # noqa: F821
-            f"`{catalog}`.`{silver_schema}`.news_cleaned"
-        )
-        .select(
-            "story_id",
-            "headline",
-            F.substring("body", 1, 500).alias("body_truncated"),
-            "published_at",
-            "source",
-        )
+    return news_firehose_transform(
+        spark.table(f"`{catalog}`.`{silver_schema}`.news_cleaned")  # noqa: F821
     )
 
 

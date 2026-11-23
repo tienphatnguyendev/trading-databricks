@@ -79,6 +79,26 @@ def _query_vs_index(
     )
 
 
+def _query_firehose(
+    query_text: str,
+    *,
+    index_name: str,
+    num_results: int,
+    timeout_s: float,
+) -> list[dict]:
+    """Query headline precedents through the existing firehose helper contract.
+
+    Keep ``timeout_s`` available to callers that supply a provisioned firehose
+    implementation. The shared VS helper remains an infrastructure stub.
+    """
+    return _query_vs_index(
+        query_text,
+        index_name=index_name,
+        num_results=num_results,
+        columns=["story_id", "headline", "body_truncated", "published_at", "source"],
+    )
+
+
 def _get_parent_articles(
     story_ids: list[str],
     *,
@@ -211,22 +231,24 @@ def rag_retriever(state: MASState, config: MASConfig) -> dict[str, Any]:
     else:
         query_text = _build_query_text(headline, evidence)
 
-    # Determine which index and columns to query
-    if config.rag.use_chunk_index:
-        index_name = f"{config.catalog}.02_silver.news_chunks_idx"
-        columns = ["chunk_id", "story_id", "chunk_text", "chunk_type", "published_at"]
-    else:
-        index_name = config.rag.firehose_index_name
-        columns = ["story_id", "headline", "body_truncated", "published_at", "source"]
-
     # Query Vector Search
     try:
-        hits = _query_vs_index(
-            query_text,
-            index_name=index_name,
-            num_results=config.rag.num_precedents * 2,  # over-retrieve for dedup
-            columns=columns,
-        )
+        if config.rag.use_chunk_index:
+            hits = _query_vs_index(
+                query_text,
+                index_name=f"{config.catalog}.02_silver.news_chunks_idx",
+                num_results=config.rag.num_precedents * 2,
+                columns=[
+                    "chunk_id", "story_id", "chunk_text", "chunk_type", "published_at",
+                ],
+            )
+        else:
+            hits = _query_firehose(
+                query_text,
+                index_name=config.rag.firehose_index_name,
+                num_results=config.rag.num_precedents,
+                timeout_s=config.rag.timeout_s,
+            )
     except NotImplementedError:
         logger.info("rag_retriever: VS index not provisioned yet")
         return {"precedents": [], "precedent_status": "unavailable"}
@@ -250,7 +272,7 @@ def rag_retriever(state: MASState, config: MASConfig) -> dict[str, Any]:
     if not precedents:
         return {"precedents": [], "precedent_status": "no_match"}
 
-    # Join market outcomes (optional, graceful degradation)
+    # Only return precedents whose market outcomes are available.
     try:
         joined = _join_market_outcomes(
             precedents,
@@ -258,11 +280,11 @@ def rag_retriever(state: MASState, config: MASConfig) -> dict[str, Any]:
             ohlc_table=config.rag.ohlc_table,
             window_hours=config.rag.outcome_window_hours,
         )
-    except NotImplementedError:
-        logger.info("rag_retriever: OHLC table not available, returning without outcomes")
-        return {"precedents": precedents, "precedent_status": "ok"}
     except Exception as exc:
         logger.warning("rag_retriever OHLC join failed: %s", exc)
-        return {"precedents": precedents, "precedent_status": "ok"}
+        return {"precedents": [], "precedent_status": "unavailable"}
 
-    return {"precedents": joined or precedents, "precedent_status": "ok"}
+    if not joined:
+        return {"precedents": [], "precedent_status": "no_match"}
+
+    return {"precedents": joined, "precedent_status": "ok"}

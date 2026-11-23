@@ -5,6 +5,7 @@ __pycache__/
 .databricks/
 .bundle/
 dist/
+build/
 *.egg
 .pytest_cache/
 .coverage
