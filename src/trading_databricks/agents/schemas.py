@@ -17,18 +17,39 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
 )
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
 
 class CausalChain(BaseModel):
-    """Pydantic schema for the LLM extraction JSON."""
+    """Pydantic schema for the LLM extraction JSON.
+
+    The canonical field is ``expected_direction`` (bullish|bearish|volatile),
+    matching the hypothesis_generator prompt output and the gold table schema.
+    For backward compatibility, input dicts with the legacy ``direction`` key
+    (up|down|neutral) are accepted and mapped automatically.
+    """
     is_impactful: bool = Field(description="False if the article does not describe a clear causal event for BTC/ETH")
     treatment_class: str | None = Field(default=None, description="MUST be exactly one of the 34 categories")
     trigger_event: str | None = Field(default=None, description="The raw event")
     mechanism: str | None = Field(default=None, description="The causal driver, exactly matching a whitelist entry for the L1 category")
+    mechanism_candidate: str | None = Field(default=None, description="Novel mechanism description (<=30 words) when mechanism='other'")
     asset: str | None = Field(default=None, description="BTC|ETH|BOTH")
-    direction: str | None = Field(default=None, description="up|down|neutral")
+    expected_direction: str | None = Field(default=None, description="bullish|bearish|volatile")
     evidence_spans: list[str] | None = Field(default=None, description="VERBATIM exact character sequences from the article body")
+    confidence: float | None = Field(default=None, description="Confidence score [0.0, 1.0]")
     reasoning: str | None = Field(default=None, description="Explicit chain-of-thought reasoning")
+
+    # Backward compat: accept legacy "direction" key and map to expected_direction
+    @model_validator(mode="before")
+    @classmethod
+    def _compat_direction(cls, data: dict) -> dict:  # type: ignore[override]
+        if isinstance(data, dict) and "direction" in data and "expected_direction" not in data:
+            data["expected_direction"] = data.pop("direction")
+        return data
+
+    class Config:
+        extra = "ignore"  # Allow extra fields without error (e.g. mechanism_candidate)
+
 
 # ---------------------------------------------------------------------------
 # Primary output table — one row per news article processed by the MAS.
