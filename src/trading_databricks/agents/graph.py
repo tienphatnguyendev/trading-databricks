@@ -14,12 +14,17 @@ Inner causality sub-pipeline (replaces the old monolithic causality_extractor):
         → (proceed) mechanism_validator → END
 
 All transform logic lives in nodes/. This file owns topology only.
+
+Per-node MLflow tracing: every node is wrapped with @mlflow.trace() for
+latency breakdown in the MLflow Traces UI. Tracing is additive — no
+functional change to the graph.
 """
 from __future__ import annotations
 
 import os
 from typing import Literal
 
+import mlflow
 import mlflow.deployments
 
 from trading_databricks.agents.config import MASConfig
@@ -48,8 +53,18 @@ def route_after_reflector(state: MASState) -> str:
     return state.get("_route", REFLECTOR_ROUTE_VALIDATOR)
 
 
-def mechanism_validator_node(state: MASState, config: MASConfig) -> dict:
-    """Bridge validate_extraction() to the LangGraph (state) -> dict interface."""
+def mechanism_validator_node(
+    state: MASState,
+    config: MASConfig,
+    *,
+    whitelist: dict | None = None,
+) -> dict:
+    """Bridge validate_extraction() to the LangGraph (state) -> dict interface.
+
+    Args:
+        whitelist: Pre-loaded whitelist dict. When provided (e.g., Model
+            Serving), skips Spark access. When None, loads from UC.
+    """
     extraction = state.get("extraction")
     if not extraction:
         return {
@@ -58,8 +73,18 @@ def mechanism_validator_node(state: MASState, config: MASConfig) -> dict:
             "evidence_relevance_score": None,
         }
 
-    spark = get_spark_session()
-    whitelist = load_whitelist(spark, catalog=config.catalog, schema=config.schema)
+    # Use pre-loaded whitelist if available, otherwise load from UC.
+    if whitelist is None:
+        try:
+            spark = get_spark_session()
+            whitelist = load_whitelist(spark, catalog=config.catalog, schema=config.schema)
+        except NotImplementedError:
+            # No Spark (serving mode) and no pre-loaded whitelist — reject.
+            return {
+                "validation_status": "rejected_evidence",
+                "rejected_mechanism_raw": None,
+                "evidence_relevance_score": None,
+            }
 
     profile = os.environ.get("DATABRICKS_CONFIG_PROFILE", os.environ.get("DATABRICKS_PROFILE", ""))
     target_uri = f"databricks://{profile}" if profile else "databricks"
@@ -82,8 +107,26 @@ def mechanism_validator_node(state: MASState, config: MASConfig) -> dict:
     return dict(result)
 
 
-def build_mas_graph(*, config: MASConfig):
-    """Compile the MAS StateGraph with the 5-node causality sub-pipeline."""
+def _traced(name: str, fn):
+    """Wrap a node callable with MLflow tracing for latency observability."""
+    return mlflow.trace(fn, name=name, span_type="CHAIN")
+
+
+def build_mas_graph(
+    *,
+    config: MASConfig,
+    taxonomy: dict | None = None,
+    whitelist: dict | None = None,
+):
+    """Compile the MAS StateGraph with the 5-node causality sub-pipeline.
+
+    Args:
+        config: Frozen MAS configuration.
+        taxonomy: Pre-loaded taxonomy dict.  Pass when Spark is unavailable
+            (e.g., Model Serving containers).  ``None`` → loads from UC.
+        whitelist: Pre-loaded mechanism whitelist dict.  Same semantics as
+            *taxonomy*.
+    """
     from langgraph.graph import StateGraph
 
     from trading_databricks.agents.nodes import (
@@ -97,29 +140,48 @@ def build_mas_graph(*, config: MASConfig):
         uncertainty_router,
     )
 
-    spark = get_spark_session()
-    taxonomy = load_taxonomy(spark, catalog=config.catalog, schema=config.schema)
-    hyp_whitelist = load_whitelist(spark, catalog=config.catalog, schema=config.schema)
+    # Load reference data from UC when not pre-provided (requires Spark).
+    if taxonomy is None or whitelist is None:
+        try:
+            spark = get_spark_session()
+            if taxonomy is None:
+                taxonomy = load_taxonomy(spark, catalog=config.catalog, schema=config.schema)
+            if whitelist is None:
+                whitelist = load_whitelist(spark, catalog=config.catalog, schema=config.schema)
+        except NotImplementedError:
+            raise RuntimeError(
+                "build_mas_graph requires taxonomy and whitelist when Spark is unavailable. "
+                "Pass them explicitly (e.g., from bundled model artifacts)."
+            )
 
     graph = StateGraph(MASState)
 
-    # Outer nodes (unchanged)
-    graph.add_node("context_retriever",   lambda s: context_retriever(s, config=config))
-    graph.add_node("few_shot_retriever",  lambda s: few_shot_retriever(s, config=config))
-    graph.add_node("uncertainty_router",  lambda s: uncertainty_router(s, config=config))
+    # Outer nodes — each wrapped with MLflow tracing
+    graph.add_node("context_retriever",   _traced("context_retriever",   lambda s: context_retriever(s, config=config)))
+    graph.add_node("few_shot_retriever",  _traced("few_shot_retriever",  lambda s: few_shot_retriever(s, config=config)))
+    graph.add_node("uncertainty_router",  _traced("uncertainty_router",  lambda s: uncertainty_router(s, config=config)))
 
-    # Sub-pipeline nodes (new)
-    graph.add_node("evidence_extractor",   lambda s: evidence_extractor(s, config=config))
-    graph.add_node("rag_retriever",        lambda s: rag_retriever(s, config=config))
+    # Sub-pipeline nodes — each wrapped with MLflow tracing
+    graph.add_node("evidence_extractor",   _traced("evidence_extractor",   lambda s: evidence_extractor(s, config=config)))
+    graph.add_node("rag_retriever",        _traced("rag_retriever",        lambda s: rag_retriever(s, config=config)))
     graph.add_node(
         "hypothesis_generator",
-        lambda s: hypothesis_generator(s, config=config, taxonomy=taxonomy, whitelist=hyp_whitelist),
+        _traced(
+            "hypothesis_generator",
+            lambda s: hypothesis_generator(s, config=config, taxonomy=taxonomy, whitelist=whitelist),
+        ),
     )
-    graph.add_node("judge_panel",          lambda s: judge_panel(s, config=config))
-    graph.add_node("reflector",            lambda s: reflector(s, config=config))
+    graph.add_node("judge_panel",          _traced("judge_panel",          lambda s: judge_panel(s, config=config)))
+    graph.add_node("reflector",            _traced("reflector",            lambda s: reflector(s, config=config)))
 
-    # Validator (unchanged)
-    graph.add_node("mechanism_validator",  lambda s: mechanism_validator_node(s, config))
+    # Validator — pass pre-loaded whitelist to avoid Spark in serving mode.
+    graph.add_node(
+        "mechanism_validator",
+        _traced(
+            "mechanism_validator",
+            lambda s: mechanism_validator_node(s, config, whitelist=whitelist),
+        ),
+    )
 
     # Outer edges
     graph.set_entry_point("context_retriever")

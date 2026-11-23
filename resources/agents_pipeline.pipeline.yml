@@ -1,0 +1,20 @@
+resources:
+  pipelines:
+    agents_pipeline:
+      name: agents-pipeline-${bundle.target}
+      catalog: ${var.catalog}
+      target: ${var.gold_schema}
+      serverless: true
+      libraries:
+        - glob:
+            include: ../src/trading_databricks/agents/pipeline.py
+      configuration:
+        catalog: ${var.catalog}
+        bronze_schema: ${var.bronze_schema}
+        silver_schema: ${var.silver_schema}
+        gold_schema: ${var.gold_schema}
+        # Source root for sys.path — SDP serverless doesn't resolve
+        # the trading_databricks package automatically.
+        src_root: ${workspace.file_path}/src
+      continuous: false
+      development: false

@@ -28,6 +28,26 @@ class GatekeeperConfig:
 
 
 @dataclass(frozen=True)
+class ChunkingConfig:
+    """Hierarchical chunking parameters for news articles.
+
+    Token-aware splitting matched to databricks-gte-large-en (512 token context).
+    Strategy: headline chunk → lead paragraph chunk → sliding body windows.
+
+    Uses character-based token estimation (chars_per_token ratio) which
+    works in serverless environments without internet access. Conservative
+    ratio ensures chunks never exceed the embedding model context window.
+    """
+    max_chunk_tokens: int = 384         # leave 128 token headroom for model
+    overlap_tokens: int = 64            # sliding window overlap
+    headline_always_full: bool = True   # headline is always its own chunk
+    lead_paragraph_chars: int = 300     # first 300 chars as dedicated "lead" chunk
+    min_chunk_chars: int = 50           # discard fragments below this
+    chars_per_token: float = 3.5        # conservative estimate for BERT-family models
+    separators: tuple[str, ...] = ("\n\n", "\n", ". ", ", ", " ")
+
+
+@dataclass(frozen=True)
 class UncertaintyRouterConfig:
     high_similarity_threshold: float = 0.85
     low_similarity_threshold: float = 0.50
@@ -73,11 +93,15 @@ class RAGRetrieverConfig:
     num_precedents: int = 5
     outcome_window_hours: int = 24
     ohlc_table: str = OHLC_GOLD_TABLE
+    use_chunk_index: bool = False      # when True, query news_chunks_idx instead
+    chunk_to_parent: bool = True       # small-to-big: return parent doc from chunk hits
+    hyde_enabled: bool = False         # Hypothetical Document Embeddings
 
 
 @dataclass(frozen=True)
 class MASConfig:
     gatekeeper: GatekeeperConfig = field(default_factory=GatekeeperConfig)
+    chunking: ChunkingConfig = field(default_factory=ChunkingConfig)
     router: UncertaintyRouterConfig = field(default_factory=UncertaintyRouterConfig)
     validator: MechanismValidatorConfig = field(default_factory=MechanismValidatorConfig)
     reflection: ReflectionConfig = field(default_factory=ReflectionConfig)

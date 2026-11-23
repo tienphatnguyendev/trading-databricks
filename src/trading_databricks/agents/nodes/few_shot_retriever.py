@@ -86,23 +86,14 @@ def get_accepted_chain_count(
 ) -> int:
     """Query count of accepted causal chains, cached for 5 minutes.
 
-    Args:
-        spark: SparkSession instance
-        catalog: Databricks catalog name
-        schema: Schema name (typically '03_gold')
-        cache_ttl_seconds: Cache TTL in seconds (default: 300 = 5min)
-
-    Returns:
-        Count of rows where validation_status='accepted'
-
-    Example:
-        >>> count = get_accepted_chain_count(
-        ...     spark,
-        ...     catalog="<catalog-name>",
-        ...     schema="03_gold"
-        ... )
-        >>> print(f"Accepted chains: {count}")
+    Returns 0 when:
+    - spark is None (Model Serving, no Spark available)
+    - Table does not exist yet (cold-start)
+    - Any query error
     """
+    if spark is None:
+        return 0
+
     cache_key = f"{catalog}.{schema}"
     now = time.time()
 
@@ -114,13 +105,18 @@ def get_accepted_chain_count(
             return count
 
     # Query source table
-    logger.debug(f"Cache miss for {cache_key}, querying DB")
-    query = f"""
-        SELECT COUNT(*)
-        FROM `{catalog}`.`{schema}`.news_causal_features
-        WHERE validation_status = 'accepted'
-    """
-    count = spark.sql(query).collect()[0][0]
+    try:
+        logger.debug(f"Cache miss for {cache_key}, querying DB")
+        query = f"""
+            SELECT COUNT(*)
+            FROM `{catalog}`.`{schema}`.news_causal_features
+            WHERE validation_status = 'accepted'
+        """
+        count = spark.sql(query).collect()[0][0]
+    except Exception as e:
+        # TABLE_NOT_FOUND during cold-start, or other query errors
+        logger.warning("get_accepted_chain_count failed (cold-start?): %s", e)
+        return 0
 
     # Update cache
     _accepted_count_cache[cache_key] = (count, now)
@@ -144,30 +140,7 @@ def query_vector_search(
 ) -> list[dict]:
     """Query VS index for similar accepted causal chains.
 
-    Args:
-        headline: Article headline for semantic search
-        index_name: Full VS index name (catalog.schema.index)
-        num_results: Number of results to return (default: 5)
-
-    Returns:
-        List of dicts with VS result format:
-        - story_id: str
-        - treatment_class: str
-        - mechanism: str
-        - expected_direction: str
-        - confidence: float
-        - trigger_event: str
-        - causal_chain_json: str
-
-        Returns empty list on VS error (fail gracefully).
-
-    Example:
-        >>> results = query_vector_search(
-        ...     "Fed raises interest rates",
-        ...     index_name="<catalog>.<schema>.causal_chains_idx"
-        ... )
-        >>> len(results)
-        5
+    Returns empty list on VS error (fail gracefully).
     """
     if not headline or not headline.strip():
         logger.warning("Empty headline provided, returning empty results")
@@ -209,34 +182,8 @@ def merge_examples(
     *,
     max_total: int = 5,
 ) -> list[dict]:
-    """Merge dynamic + static examples, prioritizing dynamic.
-
-    Strategy: Take up to max_total dynamic examples first, then fill
-    remaining slots with static examples.
-
-    Args:
-        dynamic: VS query results (0-N examples)
-        static: Hardcoded fallback examples (5 examples)
-        max_total: Maximum total examples to return (default: 5)
-
-    Returns:
-        List of up to max_total examples, dynamic-first
-
-    Example:
-        >>> dynamic = [{"story_id": "vs-1"}, {"story_id": "vs-2"}]
-        >>> static = [{"story_id": "static-1"}, ...]
-        >>> merged = merge_examples(dynamic, static, max_total=5)
-        >>> len(merged)
-        5
-        >>> merged[0]["story_id"]
-        'vs-1'
-        >>> merged[2]["story_id"]
-        'static-1'
-    """
-    # Take dynamic first
+    """Merge dynamic + static examples, prioritizing dynamic."""
     result = dynamic[:max_total]
-
-    # Fill remaining slots with static
     remaining = max_total - len(result)
     if remaining > 0:
         result.extend(static[:remaining])
@@ -244,7 +191,6 @@ def merge_examples(
     logger.debug(
         f"Merged {len(dynamic)} dynamic + {remaining} static = {len(result)} total"
     )
-
     return result
 
 
@@ -269,29 +215,23 @@ def get_spark_session():
 def few_shot_retriever(state: MASState, config: MASConfig) -> MASState:
     """Retrieve few-shot examples for the Causality Extractor.
 
-    This LangGraph node queries the Vector Search index for similar
-    accepted causal chains and merges them with static fallback examples.
-
-    Args:
-        state: MASState with 'headline' field
-        config: MASConfig with VS settings and router.min_index_size
-
-    Returns:
-        Updated MASState with:
-        - few_shot_examples: list of 0-5 example dicts (VS result format)
-        - retrieval_story_ids: list of story_id values from dynamic results only
-
-    Cold-start guard:
-        If accepted chain count < config.router.min_index_size (50),
-        returns static examples only (no VS query).
-
-    Warm path:
-        Queries VS, merges dynamic results with static fallback (up to 5 total).
+    Gracefully handles no-Spark environments (Model Serving containers)
+    by falling back to static examples (cold-start mode).
     """
     headline = state["headline"]
 
     # Step 1: Query accepted chain count (cached 5 minutes)
-    spark = get_spark_session()
+    # Graceful fallback: if Spark is unavailable, treat as cold-start.
+    try:
+        spark = get_spark_session()
+    except NotImplementedError:
+        logger.info("No Spark session (serving mode) — using static examples")
+        return {
+            **state,
+            "few_shot_examples": STATIC_FEW_SHOT_EXAMPLES,
+            "retrieval_story_ids": [],
+        }
+
     accepted_count = get_accepted_chain_count(
         spark,
         catalog=config.catalog,
@@ -304,9 +244,11 @@ def few_shot_retriever(state: MASState, config: MASConfig) -> MASState:
             f"Cold start: {accepted_count} < {config.router.min_index_size}, "
             f"using static examples only"
         )
-        state["few_shot_examples"] = STATIC_FEW_SHOT_EXAMPLES
-        state["retrieval_story_ids"] = []
-        return state
+        return {
+            **state,
+            "few_shot_examples": STATIC_FEW_SHOT_EXAMPLES,
+            "retrieval_story_ids": [],
+        }
 
     # Step 3: Query VS (warm path)
     logger.info(f"Warm start: {accepted_count} chains available, querying VS")
@@ -324,13 +266,14 @@ def few_shot_retriever(state: MASState, config: MASConfig) -> MASState:
     )
 
     # Step 5: Update state
-    state["few_shot_examples"] = merged_examples
-    state["retrieval_story_ids"] = [ex["story_id"] for ex in dynamic_results]
-
     logger.info(
         f"Retrieved {len(dynamic_results)} dynamic + "
         f"{len(merged_examples) - len(dynamic_results)} static = "
         f"{len(merged_examples)} total examples"
     )
 
-    return state
+    return {
+        **state,
+        "few_shot_examples": merged_examples,
+        "retrieval_story_ids": [ex["story_id"] for ex in dynamic_results],
+    }
