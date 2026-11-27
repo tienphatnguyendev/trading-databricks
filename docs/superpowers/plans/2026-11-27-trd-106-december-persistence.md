@@ -19,3 +19,14 @@ uv run --locked python scripts/run_december_persistence.py \
 ```
 
 The benchmark expects 8,928 bars and 719 eligible forecast hours, of which 168 are in the final week. The last forecast starts at 23:00 UTC on December 31 and uses the close from the last five-minute bar of December as its label endpoint.
+
+## Model comparison
+
+Run the comparison against the published hourly dataset and its verified SHA-256.
+On macOS, install the Homebrew `libomp` formula before importing the boosters.
+
+```sh
+uv run --locked --extra forecasting python scripts/run_december_comparison.py --profile dbx-codex
+```
+
+The comparison chooses one simple baseline and one boosted model on December 18–24 using daily expanding training windows. It fits both choices once before December 25 and compares their forecasts on the same 168 test hours. MLflow records the validation grid, the selected configurations, the paired predictions, and the change in average QLIKE when each test day is omitted.
