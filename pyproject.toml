@@ -40,6 +40,10 @@ ci = [
     "pytest>=8.3.4,<9",
     "chispa>=0.9,<1",
 ]
+forecasting = [
+    "xgboost==3.4.1; sys_platform == 'darwin'",
+    "xgboost-cpu==3.4.1; sys_platform != 'darwin'",
+]
 
 [build-system]
 requires = [
